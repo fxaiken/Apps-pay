@@ -1,0 +1,91 @@
+name: Claude Chat build
+
+on:
+  push:
+    branches: [claude-chat]
+  workflow_dispatch:
+
+concurrency:
+  group: claude-chat-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    name: Android APK
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Build web app
+        run: |
+          npm ci
+          npm run build
+
+      - name: Create Android project
+        run: |
+          npx cap add android
+          npx cap sync android
+
+      - name: Build debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Rename APK
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk claude-chat.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v7
+        with:
+          path: claude-chat.apk
+          archive: false
+          retention-days: 90
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: claude-chat-v${{ github.run_number }}
+          name: Claude Chat (build ${{ github.run_number }})
+          target_commitish: ${{ github.sha }}
+          prerelease: true
+          make_latest: false
+          files: claude-chat.apk
+          body: |
+            App de chat com o Claude para Android.
+            Descarregue `claude-chat.apk`, abra-o no telemóvel e configure a sua chave da API da Anthropic nas definições.
+
+  web:
+    name: Web (GitHub Pages)
+    runs-on: ubuntu-latest
+    # Requires Settings > Pages > Source: "GitHub Actions". Failing here never blocks the APK.
+    continue-on-error: true
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci && npm run build
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist
+      - id: deploy
+        uses: actions/deploy-pages@v4

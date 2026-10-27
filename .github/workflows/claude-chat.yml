@@ -94,16 +94,10 @@ jobs:
             A partir desta versão, as atualizações instalam por cima. Se tiver uma versão mais antiga instalada, desinstale-a primeiro.
 
   web:
-    name: Web (GitHub Pages)
+    name: Web site (gh-pages branch)
     runs-on: ubuntu-latest
-    # Requires Settings > Pages > Source: "GitHub Actions". Failing here never blocks the APK.
-    continue-on-error: true
     permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
+      contents: write
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -111,9 +105,11 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci && npm run build
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v4
+      # Served by GitHub Pages once Settings > Pages > "Deploy from a branch" points at gh-pages / (root).
+      - uses: peaceiris/actions-gh-pages@v4
         with:
-          path: dist
-      - id: deploy
-        uses: actions/deploy-pages@v4
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: dist
+          publish_branch: gh-pages
+          force_orphan: true
+          commit_message: "Publish Aura web ${{ github.sha }}"

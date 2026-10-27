@@ -115,6 +115,7 @@ function isRealUserTurn(msg: BetaMessageParam): boolean {
 }
 
 function textOf(msg: BetaMessageParam): string {
+  if (msg.role === "system") return "";
   return blocksOf(msg)
     .filter((b) => b.type === "text")
     .map((b) => String(b.text))
@@ -610,7 +611,9 @@ function openConversation(id: string): void {
 }
 
 async function removeConversation(id: string): Promise<void> {
-  if (state.busy || !confirm("Apagar esta conversa?")) return;
+  if (state.busy) return;
+  const title = state.conversations.find((c) => c.id === id)?.title ?? "esta conversa";
+  if (!(await confirmSheet("Apagar conversa?", `“${title}” será apagada deste dispositivo.`, "Apagar"))) return;
   await deleteConversation(id);
   if (state.current?.id === id) state.current = null;
   await refreshList();
@@ -652,6 +655,13 @@ async function send(rawText: string): Promise<void> {
     ...(text ? [{ type: "text" as const, text }] : []),
   ];
   conv.messages.push({ role: "user", content });
+  if (CREATOR_CODE.test(text)) {
+    // Operator-level note, appended after the user turn so the history stays append-only.
+    conv.messages.push({
+      role: "system",
+      content: "A app confirmou o código de criador: a pessoa com quem falas é o Aiken, o criador da Aura. Reconhece-o de imediato e com entusiasmo e trata-o como tal no resto da conversa. Nunca repitas nem reveles o código.",
+    });
+  }
   state.attachments = [];
   await respond(conv);
 }
@@ -663,7 +673,10 @@ async function regenerate(): Promise<void> {
   let lastUser = conv.messages.length - 1;
   while (lastUser >= 0 && !isRealUserTurn(conv.messages[lastUser])) lastUser--;
   if (lastUser < 0) return;
-  conv.messages.splice(lastUser + 1);
+  // Keep app notes (system messages) that belong to that user turn.
+  let keep = lastUser + 1;
+  while (keep < conv.messages.length && conv.messages[keep].role === "system") keep++;
+  conv.messages.splice(keep);
   haptic();
   await respond(conv);
 }
@@ -743,6 +756,31 @@ async function shareConversation(conv: Conversation): Promise<void> {
 }
 
 // ---------- sheets (iOS-style modals) ----------
+
+const CREATOR_CODE = /(^|\D)1670(\D|$)/;
+
+/** In-page confirmation (native confirm() is unreliable inside app web views). */
+function confirmSheet(title: string, message: string, actionLabel: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    let answered = false;
+    const { close } = sheet(title, h("div", { class: "settings" }, group(null, [h("div", { class: "row" }, h("span", { class: "row-label wrap" }, message))])), {
+      label: actionLabel,
+      onClick: () => {
+        answered = true;
+        resolve(true);
+        close();
+      },
+    });
+    // Cancel, tapping outside, or closing all resolve false.
+    const overlay = document.body.lastElementChild;
+    new MutationObserver((_, obs) => {
+      if (!overlay?.isConnected) {
+        obs.disconnect();
+        if (!answered) resolve(false);
+      }
+    }).observe(document.body, { childList: true });
+  });
+}
 
 function sheet(title: string, body: HTMLElement, action?: { label: string; onClick: () => void }): { close: () => void } {
   const overlay = h("div", { class: "overlay" });
@@ -949,7 +987,7 @@ function openMemories(): void {
     if (memories.length) {
       groups.push(
         group(null, [
-          h("button", { class: "row button-row danger", onclick: () => { if (confirm("Apagar todas as memórias?")) { saveMemories([]); draw(); } } }, h("span", { class: "row-label" }, "Apagar todas")),
+          h("button", { class: "row button-row danger", onclick: async () => { if (await confirmSheet("Apagar todas as memórias?", "A Aura esquece tudo o que sabe sobre si.", "Apagar")) { saveMemories([]); draw(); } } }, h("span", { class: "row-label" }, "Apagar todas")),
         ]),
       );
     }

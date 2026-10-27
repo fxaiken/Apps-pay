@@ -31,6 +31,12 @@ npm run dev      # servidor local
 npm run build    # gera dist/
 ```
 
+## Site
+
+Cada push para `claude-chat` publica a versão web no ramo `gh-pages`. Para a pôr online (uma vez):
+**Settings → Pages → Build and deployment → Source: Deploy from a branch → `gh-pages` / `(root)` → Save**.
+O site fica em `https://fxaiken.github.io/Apps-pay/`.
+
 ## Android
 
 O GitHub Actions (`.github/workflows/claude-chat.yml`) compila o APK com o Capacitor em cada push

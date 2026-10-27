@@ -62,7 +62,8 @@ svg { display: block; }
 button { transition: transform 0.25s var(--spring), opacity 0.2s, background-color 0.2s; }
 button:active { transform: scale(0.95); }
 
-.layout { position: relative; z-index: 1; display: flex; height: 100dvh; }
+/* No z-index here: a stacking context would put the drawer under the page-level scrim on phones. */
+.layout { position: relative; display: flex; height: 100dvh; }
 
 /* ---------- Edge glow while Aura answers (Siri) ---------- */
 .aura-glow {

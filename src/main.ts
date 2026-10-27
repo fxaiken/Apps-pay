@@ -145,7 +145,7 @@ function conversationMarkdown(conv: Conversation): string {
     if (msg.role === "user" && !isRealUserTurn(msg)) continue;
     const text = textOf(msg).trim();
     if (!text) continue;
-    lines.push(msg.role === "user" ? `**Eu:** ${text}` : `**Claude:** ${text}`, "");
+    lines.push(msg.role === "user" ? `**Eu:** ${text}` : `**Aura:** ${text}`, "");
   }
   return lines.join("\n");
 }
@@ -158,11 +158,36 @@ let streamingEl: HTMLElement | null = null;
 let rafPending = false;
 
 function render(): void {
+  document.body.classList.toggle("aura-active", state.busy);
   app.replaceChildren(
+    h("div", { class: "aura-glow", "aria-hidden": "true" }),
     h("div", { class: "layout" }, renderSidebar(), renderMain()),
     h("div", { class: "scrim", onclick: closeDrawer }),
   );
   scrollToBottom(true);
+}
+
+/** Animated gradient orb (Siri-style); `size` in px. */
+function orb(size: number, extraClass = ""): HTMLElement {
+  return h(
+    "span",
+    { class: `orb ${extraClass}`, style: `--orb:${size}px`, "aria-hidden": "true" },
+    h("span", { class: "orb-layer l1" }),
+    h("span", { class: "orb-layer l2" }),
+    h("span", { class: "orb-layer l3" }),
+  );
+}
+
+/** What the assistant is doing right now, shown in the island at the top. */
+function activityLabel(): string {
+  const blocks = (state.streaming?.content ?? []) as unknown as AnyBlock[];
+  const last = blocks[blocks.length - 1];
+  if (!last) return "A pensar…";
+  if (last.type === "server_tool_use") return last.name === "web_fetch" ? "A ler a página…" : "A pesquisar…";
+  if (last.type === "web_search_tool_result" || last.type === "web_fetch_tool_result") return "A analisar…";
+  if (last.type === "tool_use") return "A memorizar…";
+  if (last.type === "thinking") return "A pensar…";
+  return "A escrever…";
 }
 
 function closeDrawer(): void {
@@ -247,17 +272,20 @@ function renderMain(): HTMLElement {
     h(
       "button",
       { class: "nav-center", onclick: conv?.messages.length ? openConversationInfo : openPersonas },
-      h("span", { class: "nav-avatar" }, activePersona.emoji),
       h(
         "span",
-        { class: "nav-titles" },
-        h("span", { class: "nav-title" }, conv?.title ?? activePersona.name),
-        h(
-          "span",
-          { class: "nav-subtitle" },
-          MODELS.find((m) => m.id === model)?.short ?? "",
-          turboOn ? h("span", { class: "turbo-badge" }, icon("bolt", 11), "Turbo") : null,
-        ),
+        { class: "island" + (state.busy ? " active" : "") },
+        orb(state.busy ? 22 : 18, state.busy ? "spinning" : ""),
+        state.busy
+          ? h("span", { class: "island-status", id: "island-status" }, activityLabel())
+          : h("span", { class: "island-name" }, activePersona.id === "default" ? "Aura" : `${activePersona.emoji} ${activePersona.name}`),
+      ),
+      h(
+        "span",
+        { class: "nav-subtitle" },
+        conv?.messages.length ? h("span", { class: "nav-title" }, conv.title) : null,
+        h("span", {}, MODELS.find((m) => m.id === model)?.short ?? ""),
+        turboOn ? h("span", { class: "turbo-badge" }, icon("bolt", 11), "Turbo") : null,
       ),
     ),
     conv?.messages.length
@@ -299,9 +327,9 @@ function renderEmpty(p: Persona): HTMLElement {
   return h(
     "div",
     { class: "empty" },
-    h("div", { class: "empty-icon" }, icon("sparkle", 34)),
-    h("h2", {}, "Como posso ajudar?"),
-    h("p", { class: "secondary" }, `${p.emoji} ${p.name}`),
+    orb(132, "hero"),
+    h("h2", { class: "aura-title" }, p.id === "default" ? "Olá, sou a Aura" : `${p.emoji} ${p.name}`),
+    h("p", { class: "secondary" }, "Pergunte o que quiser, por texto ou com uma foto."),
     h(
       "div",
       { class: "suggestions" },
@@ -420,7 +448,7 @@ function renderComposer(): HTMLElement {
   const input = h("textarea", {
     id: "prompt",
     rows: "1",
-    placeholder: state.settings.apiKey ? "Mensagem" : "Configure a chave de API",
+    placeholder: state.settings.apiKey ? "Pergunte à Aura" : "Configure a chave de API",
     "aria-label": "Mensagem",
   }) as HTMLTextAreaElement;
 
@@ -544,6 +572,8 @@ function updateStreaming(): void {
   rafPending = true;
   requestAnimationFrame(() => {
     rafPending = false;
+    const status = document.getElementById("island-status");
+    if (status) status.textContent = activityLabel();
     if (!state.streaming || !messagesEl) return;
     const next = renderAssistantBlocks(state.streaming.content as unknown as AnyBlock[], { live: true, last: false });
     if (streamingEl?.isConnected) streamingEl.replaceWith(next);
@@ -668,7 +698,7 @@ async function respond(conv: Conversation): Promise<void> {
     if (outcome.kind === "refusal") {
       state.notice = {
         kind: "info",
-        text: "O Claude não respondeu a este pedido." + (outcome.explanation ? ` (${outcome.explanation})` : ""),
+        text: "A Aura não respondeu a este pedido." + (outcome.explanation ? ` (${outcome.explanation})` : ""),
       };
     } else if (outcome.kind === "max_tokens") {
       state.notice = { kind: "info", text: "A resposta foi cortada por ser demasiado longa." };
@@ -913,7 +943,7 @@ function openMemories(): void {
       draw();
     });
     const groups = [
-      group("O que o Claude sabe sobre si", rows, "O Claude guarda factos quando lhe pedir ou quando forem úteis. Entram nas novas conversas."),
+      group("O que a Aura sabe sobre si", rows, "A Aura guarda factos quando lhe pedir ou quando forem úteis. Entram nas novas conversas."),
       group(null, [h("div", { class: "row" }, fact), add]),
     ];
     if (memories.length) {

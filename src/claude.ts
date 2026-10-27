@@ -32,6 +32,7 @@ const MemoryDeleteInput = z.object({ id: z.string().min(1) });
 
 export function buildSystemPrompt(persona: Persona, memoryEnabled: boolean, memories: Memory[]): string {
   const parts = [
+    "O teu nome é Aura, uma assistente pessoal. Funcionas com o modelo Claude, da Anthropic; se te perguntarem que modelo és, diz isso com honestidade.",
     persona.prompt,
     "Responde na língua do utilizador (por defeito, português). Usa Markdown quando ajudar a leitura.",
     `Data de hoje: ${new Date().toISOString().slice(0, 10)}.`,
@@ -201,8 +202,8 @@ export function friendlyError(err: unknown): string {
 }
 
 /**
- * Runs one user turn: streams Claude's answer, resumes paused server-tool turns,
- * and executes memory tool calls until Claude finishes. Appends to conv.messages only.
+ * Runs one user turn: streams the answer, resumes paused server-tool turns,
+ * and executes memory tool calls until the model finishes. Appends to conv.messages only.
  */
 export async function runTurn(
   conv: Conversation,

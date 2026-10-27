@@ -68,9 +68,9 @@ export const MODELS: { id: ModelId; label: string; short: string }[] = [
 export const BUILT_IN_PERSONAS: Persona[] = [
   {
     id: "default",
-    name: "Assistente",
+    name: "Aura",
     emoji: "✨",
-    prompt: "És um assistente útil, direto e simpático.",
+    prompt: "És uma assistente útil, direta e simpática.",
     builtIn: true,
   },
   {
@@ -154,6 +154,7 @@ export function saveMemories(memories: Memory[]): void {
   writeJson(MEMORIES_KEY, memories);
 }
 
+// Storage names keep the original "claude-chat"/"cc." prefixes so existing data survives the rename.
 // Conversations live in IndexedDB: attachments (images, PDFs) quickly outgrow localStorage.
 const DB_NAME = "claude-chat";
 const STORE = "conversations";

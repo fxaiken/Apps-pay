@@ -1,4 +1,4 @@
-name: Claude Chat build
+name: Aura build
 
 on:
   push:
@@ -41,19 +41,19 @@ jobs:
       - name: Generate app icon
         # Cosmetic only: keep the default icon rather than fail the build.
         continue-on-error: true
-        run: npx --yes @capacitor/assets@3.0.5 generate --android --iconBackgroundColor '#0a84ff' --iconBackgroundColorDark '#0a84ff'
+        run: npx --yes @capacitor/assets@3.0.5 generate --android --iconBackgroundColor '#05040a' --iconBackgroundColorDark '#05040a'
 
       - name: Build debug APK
         working-directory: android
         run: ./gradlew assembleDebug --no-daemon
 
       - name: Rename APK
-        run: cp android/app/build/outputs/apk/debug/app-debug.apk claude-chat.apk
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk aura.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v7
         with:
-          path: claude-chat.apk
+          path: aura.apk
           archive: false
           retention-days: 90
 
@@ -61,14 +61,15 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: claude-chat-v${{ github.run_number }}
-          name: Claude Chat (build ${{ github.run_number }})
+          name: Aura (build ${{ github.run_number }})
           target_commitish: ${{ github.sha }}
           prerelease: true
           make_latest: false
-          files: claude-chat.apk
+          files: aura.apk
           body: |
-            App de chat com o Claude para Android.
-            Descarregue `claude-chat.apk`, abra-o no telemóvel e configure a sua chave da API da Anthropic nas definições.
+            Aura — assistente pessoal com o modelo Claude (Anthropic), para Android.
+            Descarregue `aura.apk`, abra-o no telemóvel e configure a sua chave da API da Anthropic nas definições.
+            Instala por cima de versões anteriores (Claude Chat) sem perder conversas.
 
   web:
     name: Web (GitHub Pages)

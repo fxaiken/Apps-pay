@@ -1,6 +1,7 @@
-# Claude Chat
+# Aura
 
-App de chat com o Claude (Anthropic), para web e Android, com:
+Assistente pessoal para web e Android, a funcionar com o modelo **Claude** da Anthropic
+(Opus 5.5 por defeito; Sonnet 5.5 e Haiku 5.5 nas definições), com:
 
 - **Pesquisa na internet** com fontes citadas
 - **Ficheiros e imagens**: fotos, PDFs e ficheiros de texto/código
@@ -10,7 +11,8 @@ App de chat com o Claude (Anthropic), para web e Android, com:
 - **Leitura de links**: cole um URL e o Claude lê a página
 - **Gerar outra resposta**, **ler em voz alta** e **ditado por voz** (quando o browser suporta)
 - **Pesquisa nas conversas**, **partilhar/exportar** em Markdown e **custo estimado** por conversa
-- Design ao estilo Apple (iOS): balões do iMessage, barras translúcidas, painéis e interruptores do iOS, modo claro/escuro
+- Design inspirado na Siri do iOS 27: tema escuro com gradientes rosa/roxo/azul/laranja, esfera animada,
+  "ilha" de estado no topo, brilho à volta do ecrã enquanto responde, painéis translúcidos e animações com as curvas do iOS
 
 ## Chave de API
 

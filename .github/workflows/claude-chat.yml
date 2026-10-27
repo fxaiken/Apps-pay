@@ -43,6 +43,28 @@ jobs:
         continue-on-error: true
         run: npx --yes @capacitor/assets@3.0.5 generate --android --iconBackgroundColor '#05040a' --iconBackgroundColorDark '#05040a'
 
+      # Android only installs an update signed with the same key as the installed app,
+      # and each runner would otherwise generate a new debug key. The key never lives in the repo.
+      - name: Restore signing key
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: aura-signing-key-v1
+
+      - name: Use a stable signing key and a rising version number
+        env:
+          KEYSTORE_BASE64: ${{ secrets.AURA_KEYSTORE_BASE64 }}
+        run: |
+          mkdir -p ~/.android
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            printf '%s' "$KEYSTORE_BASE64" | base64 --decode > ~/.android/debug.keystore
+          elif [ ! -f ~/.android/debug.keystore ]; then
+            keytool -genkeypair -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey \
+              -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Aura,O=Aura,C=PT"
+          fi
+          sed -i -E "s/versionCode [0-9]+/versionCode ${{ github.run_number }}/; s/versionName \"[^\"]*\"/versionName \"1.${{ github.run_number }}\"/" android/app/build.gradle
+          grep -E "versionCode|versionName" android/app/build.gradle
+
       - name: Build debug APK
         working-directory: android
         run: ./gradlew assembleDebug --no-daemon
@@ -69,7 +91,7 @@ jobs:
           body: |
             Aura — assistente pessoal com o modelo Claude (Anthropic), para Android.
             Descarregue `aura.apk`, abra-o no telemóvel e configure a sua chave da API da Anthropic nas definições.
-            Instala por cima de versões anteriores (Claude Chat) sem perder conversas.
+            A partir desta versão, as atualizações instalam por cima. Se tiver uma versão mais antiga instalada, desinstale-a primeiro.
 
   web:
     name: Web (GitHub Pages)

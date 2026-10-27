@@ -44,3 +44,14 @@ npx cap add android
 npx cap sync android
 cd android && ./gradlew assembleDebug
 ```
+
+### Assinatura
+
+O Android só instala uma atualização assinada com a mesma chave da versão instalada.
+O workflow usa, por esta ordem:
+
+1. o segredo `AURA_KEYSTORE_BASE64` (keystore em base64, alias `androiddebugkey`, palavra-passe `android`), se existir;
+2. caso contrário, uma chave gerada uma vez e guardada na cache do GitHub Actions
+   (a cache expira se não houver compilações durante 7 dias; nesse caso a chave muda).
+
+A chave nunca é guardada no repositório.

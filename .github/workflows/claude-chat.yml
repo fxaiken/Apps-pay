@@ -38,6 +38,11 @@ jobs:
           npx cap add android
           npx cap sync android
 
+      - name: Generate app icon
+        # Cosmetic only: keep the default icon rather than fail the build.
+        continue-on-error: true
+        run: npx --yes @capacitor/assets@3.0.5 generate --android --iconBackgroundColor '#0a84ff' --iconBackgroundColorDark '#0a84ff'
+
       - name: Build debug APK
         working-directory: android
         run: ./gradlew assembleDebug --no-daemon

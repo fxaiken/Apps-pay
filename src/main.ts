@@ -2,8 +2,10 @@ import "./style.css";
 import type Anthropic from "@anthropic-ai/sdk";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
-import { buildSystemPrompt, friendlyError, runTurn } from "./claude";
+import { buildSystemPrompt, friendlyError, runTurn, supportsTurbo } from "./claude";
 import { fileToBlock, type PendingAttachment } from "./attachments";
+import { icon } from "./icons";
+import { canDictate, canSpeak, dictate, speak, stopSpeaking, type Dictation } from "./speech";
 import {
   type Conversation,
   type Effort,
@@ -24,6 +26,7 @@ import {
 
 type BetaMessageParam = Anthropic.Beta.BetaMessageParam;
 type AnyBlock = { type: string; [key: string]: unknown };
+type Child = Node | string | null | undefined | false;
 
 marked.setOptions({ gfm: true, breaks: true });
 DOMPurify.addHook("afterSanitizeAttributes", (node) => {
@@ -43,6 +46,8 @@ const state = {
   abort: null as AbortController | null,
   streaming: null as Anthropic.Beta.BetaMessage | null,
   notice: null as { kind: "error" | "info"; text: string } | null,
+  search: "",
+  dictation: null as Dictation | null,
 };
 
 // ---------- helpers ----------
@@ -50,7 +55,7 @@ const state = {
 function h<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   attrs: Record<string, string | boolean | ((e: Event) => void)> = {},
-  ...children: (Node | string | null | undefined | false)[]
+  ...children: Child[]
 ): HTMLElementTagNameMap[K] {
   const el = document.createElement(tag);
   for (const [key, value] of Object.entries(attrs)) {
@@ -62,12 +67,24 @@ function h<K extends keyof HTMLElementTagNameMap>(
   return el;
 }
 
+function iconButton(name: string, title: string, onclick: (e: Event) => void, cls = "icon-btn"): HTMLButtonElement {
+  return h("button", { class: cls, title, "aria-label": title, onclick }, icon(name));
+}
+
+function haptic(): void {
+  try {
+    navigator.vibrate?.(8);
+  } catch {
+    /* not supported */
+  }
+}
+
 function markdown(text: string): HTMLElement {
   const div = h("div", { class: "md" });
   div.innerHTML = DOMPurify.sanitize(marked.parse(text, { async: false }));
   for (const pre of div.querySelectorAll("pre")) {
-    const btn = h("button", { class: "copy-code", title: "Copiar código" }, "Copiar");
     const code = pre.querySelector("code")?.textContent ?? "";
+    const btn = h("button", { class: "copy-code" }, "Copiar");
     btn.addEventListener("click", () => copy(code, btn));
     pre.append(btn);
   }
@@ -77,9 +94,9 @@ function markdown(text: string): HTMLElement {
 async function copy(text: string, btn: HTMLElement): Promise<void> {
   try {
     await navigator.clipboard.writeText(text);
-    const old = btn.textContent;
-    btn.textContent = "Copiado ✓";
-    setTimeout(() => (btn.textContent = old), 1500);
+    haptic();
+    btn.classList.add("done");
+    setTimeout(() => btn.classList.remove("done"), 1500);
   } catch {
     /* clipboard unavailable */
   }
@@ -93,9 +110,44 @@ function blocksOf(msg: BetaMessageParam): AnyBlock[] {
   return typeof msg.content === "string" ? [{ type: "text", text: msg.content }] : (msg.content as AnyBlock[]);
 }
 
+function isRealUserTurn(msg: BetaMessageParam): boolean {
+  return msg.role === "user" && !blocksOf(msg).every((b) => b.type === "tool_result");
+}
+
+function textOf(msg: BetaMessageParam): string {
+  return blocksOf(msg)
+    .filter((b) => b.type === "text")
+    .map((b) => String(b.text))
+    .join("");
+}
+
 function conversationTitle(text: string): string {
   const clean = text.replace(/\s+/g, " ").trim();
   return clean.length > 48 ? clean.slice(0, 48) + "…" : clean || "Nova conversa";
+}
+
+function relativeDate(ts: number): string {
+  const d = new Date(ts);
+  const today = new Date();
+  if (d.toDateString() === today.toDateString()) return d.toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" });
+  const yesterday = new Date(today.getTime() - 86_400_000);
+  if (d.toDateString() === yesterday.toDateString()) return "Ontem";
+  return d.toLocaleDateString("pt-PT", { day: "numeric", month: "short" });
+}
+
+function formatCost(usd: number): string {
+  return usd < 0.01 ? "< $0,01" : "$" + usd.toFixed(2).replace(".", ",");
+}
+
+function conversationMarkdown(conv: Conversation): string {
+  const lines = [`# ${conv.title}`, ""];
+  for (const msg of conv.messages) {
+    if (msg.role === "user" && !isRealUserTurn(msg)) continue;
+    const text = textOf(msg).trim();
+    if (!text) continue;
+    lines.push(msg.role === "user" ? `**Eu:** ${text}` : `**Claude:** ${text}`, "");
+  }
+  return lines.join("\n");
 }
 
 // ---------- rendering ----------
@@ -108,36 +160,76 @@ let rafPending = false;
 function render(): void {
   app.replaceChildren(
     h("div", { class: "layout" }, renderSidebar(), renderMain()),
-    h("div", { class: "scrim", onclick: () => document.body.classList.remove("drawer-open") }),
+    h("div", { class: "scrim", onclick: closeDrawer }),
   );
   scrollToBottom(true);
 }
 
-function renderSidebar(): HTMLElement {
+function closeDrawer(): void {
+  document.body.classList.remove("drawer-open");
+}
+
+function conversationMatches(conv: Conversation, query: string): boolean {
+  if (!query) return true;
+  const q = query.toLowerCase();
+  return conv.title.toLowerCase().includes(q) || conv.messages.some((m) => textOf(m).toLowerCase().includes(q));
+}
+
+function renderConversationList(): HTMLElement {
   const list = h("nav", { class: "conv-list" });
-  for (const conv of state.conversations) {
-    const item = h(
-      "div",
-      { class: "conv-item" + (conv.id === state.current?.id ? " active" : "") },
-      h("button", { class: "conv-open", onclick: () => openConversation(conv.id) }, `${persona(conv.personaId).emoji} ${conv.title}`),
-      h("button", { class: "icon-btn small", title: "Apagar conversa", onclick: () => removeConversation(conv.id) }, "✕"),
+  const visible = state.conversations.filter((c) => conversationMatches(c, state.search));
+  for (const conv of visible) {
+    const lastText = [...conv.messages].reverse().map(textOf).find((t) => t.trim()) ?? "";
+    list.append(
+      h(
+        "div",
+        { class: "conv-item" + (conv.id === state.current?.id ? " active" : "") },
+        h(
+          "button",
+          { class: "conv-open", onclick: () => openConversation(conv.id) },
+          h("span", { class: "avatar" }, persona(conv.personaId).emoji),
+          h(
+            "span",
+            { class: "conv-text" },
+            h("span", { class: "conv-top" }, h("span", { class: "conv-title" }, conv.title), h("span", { class: "conv-date" }, relativeDate(conv.updatedAt))),
+            h("span", { class: "conv-preview" }, lastText.replace(/[#*`>_]/g, "").slice(0, 90)),
+          ),
+        ),
+        iconButton("trash", "Apagar conversa", () => removeConversation(conv.id), "icon-btn small delete"),
+      ),
     );
-    list.append(item);
   }
-  if (!state.conversations.length) list.append(h("p", { class: "muted pad" }, "Ainda não há conversas."));
+  if (!visible.length) {
+    list.append(h("p", { class: "list-empty" }, state.search ? "Sem resultados." : "Ainda não há conversas."));
+  }
+  return list;
+}
+
+function renderSidebar(): HTMLElement {
+  const search = h("input", { type: "search", placeholder: "Pesquisar", value: state.search, "aria-label": "Pesquisar conversas" }) as HTMLInputElement;
+  search.addEventListener("input", () => {
+    state.search = search.value;
+    document.querySelector(".conv-list")?.replaceWith(renderConversationList());
+  });
 
   return h(
     "aside",
     { class: "sidebar" },
-    h("div", { class: "brand" }, h("img", { src: "./icon.svg", alt: "" }), "Claude Chat"),
-    h("button", { class: "btn primary block", onclick: () => newConversation() }, "＋ Nova conversa"),
-    list,
+    h(
+      "div",
+      { class: "sidebar-bar" },
+      iconButton("gear", "Definições", openSettings),
+      h("div", { class: "spacer" }),
+      iconButton("compose", "Nova conversa", newConversation),
+    ),
+    h("h1", { class: "large-title" }, "Conversas"),
+    h("label", { class: "search-field" }, icon("search", 17), search),
+    renderConversationList(),
     h(
       "div",
       { class: "sidebar-footer" },
-      h("button", { class: "btn ghost block", onclick: openPersonas }, "🎭 Personas"),
-      h("button", { class: "btn ghost block", onclick: openMemories }, "🧠 Memória"),
-      h("button", { class: "btn ghost block", onclick: openSettings }, "⚙️ Definições"),
+      h("button", { class: "footer-link", onclick: openPersonas }, icon("person", 20), "Personas"),
+      h("button", { class: "footer-link", onclick: openMemories }, icon("brain", 20), "Memória"),
     ),
   );
 }
@@ -145,32 +237,49 @@ function renderSidebar(): HTMLElement {
 function renderMain(): HTMLElement {
   const conv = state.current;
   const activePersona = persona(conv?.personaId ?? state.settings.activePersonaId);
+  const model = conv?.model ?? state.settings.model;
+  const turboOn = state.settings.turbo && supportsTurbo(model);
+
   const header = h(
     "header",
-    { class: "topbar" },
-    h("button", { class: "icon-btn menu-btn", title: "Menu", onclick: () => document.body.classList.add("drawer-open") }, "☰"),
-    h("div", { class: "title" }, conv?.title ?? "Nova conversa"),
+    { class: "navbar" },
+    iconButton("sidebar", "Conversas", () => document.body.classList.add("drawer-open"), "icon-btn menu-btn"),
     h(
       "button",
-      { class: "chip", title: "Mudar persona", onclick: openPersonas, disabled: !!conv?.messages.length },
-      `${activePersona.emoji} ${activePersona.name}`,
+      { class: "nav-center", onclick: conv?.messages.length ? openConversationInfo : openPersonas },
+      h("span", { class: "nav-avatar" }, activePersona.emoji),
+      h(
+        "span",
+        { class: "nav-titles" },
+        h("span", { class: "nav-title" }, conv?.title ?? activePersona.name),
+        h(
+          "span",
+          { class: "nav-subtitle" },
+          MODELS.find((m) => m.id === model)?.short ?? "",
+          turboOn ? h("span", { class: "turbo-badge" }, icon("bolt", 11), "Turbo") : null,
+        ),
+      ),
     ),
+    conv?.messages.length
+      ? iconButton("ellipsis", "Opções da conversa", openConversationInfo)
+      : iconButton("compose", "Nova conversa", newConversation, "icon-btn compose-mobile"),
   );
 
   messagesEl = h("section", { class: "messages" });
   if (!conv || !conv.messages.length) {
     messagesEl.append(renderEmpty(activePersona));
   } else {
-    for (const msg of conv.messages) {
-      const el = renderMessage(msg);
+    const lastAssistantIndex = conv.messages.map((m) => m.role).lastIndexOf("assistant");
+    conv.messages.forEach((msg, i) => {
+      const el = renderMessage(msg, i === lastAssistantIndex && !state.busy);
       if (el) messagesEl.append(el);
-    }
+    });
   }
   if (state.streaming) {
-    streamingEl = renderAssistantBlocks(state.streaming.content as unknown as AnyBlock[], true);
+    streamingEl = renderAssistantBlocks(state.streaming.content as unknown as AnyBlock[], { live: true, last: false });
     messagesEl.append(streamingEl);
   } else if (state.busy) {
-    streamingEl = h("div", { class: "msg assistant" }, h("div", { class: "typing" }, h("span"), h("span"), h("span")));
+    streamingEl = h("div", { class: "msg assistant" }, h("div", { class: "bubble typing" }, h("span"), h("span"), h("span")));
     messagesEl.append(streamingEl);
   }
   if (state.notice) {
@@ -182,46 +291,54 @@ function renderMain(): HTMLElement {
 
 function renderEmpty(p: Persona): HTMLElement {
   const suggestions = [
-    "Quais são as notícias de hoje sobre tecnologia?",
-    "Explica-me como funciona a inflação, com exemplos simples",
-    "Ajuda-me a escrever um email profissional",
-    "Lembra-te de que prefiro respostas curtas",
+    ["🗞️", "Notícias de hoje", "Quais são as principais notícias de hoje?"],
+    ["💡", "Explica-me", "Explica-me como funciona a inflação, com exemplos simples"],
+    ["✉️", "Escrever", "Ajuda-me a escrever um email profissional"],
+    ["🧠", "Lembra-te", "Lembra-te de que prefiro respostas curtas"],
   ];
   return h(
     "div",
     { class: "empty" },
-    h("div", { class: "empty-emoji" }, p.emoji),
-    h("h1", {}, "Como posso ajudar?"),
-    h("p", { class: "muted" }, `A falar com: ${p.name}`),
+    h("div", { class: "empty-icon" }, icon("sparkle", 34)),
+    h("h2", {}, "Como posso ajudar?"),
+    h("p", { class: "secondary" }, `${p.emoji} ${p.name}`),
     h(
       "div",
       { class: "suggestions" },
-      ...suggestions.map((s) => h("button", { class: "suggestion", onclick: () => send(s) }, s)),
+      ...suggestions.map(([emoji, title, prompt]) =>
+        h("button", { class: "suggestion", onclick: () => send(prompt) }, h("span", { class: "s-emoji" }, emoji), h("span", { class: "s-title" }, title), h("span", { class: "s-text" }, prompt)),
+      ),
     ),
   );
 }
 
-function renderMessage(msg: BetaMessageParam): HTMLElement | null {
+function renderMessage(msg: BetaMessageParam, isLastAssistant: boolean): HTMLElement | null {
   const blocks = blocksOf(msg);
-  if (msg.role === "assistant") return renderAssistantBlocks(blocks, false);
+  if (msg.role === "assistant") return renderAssistantBlocks(blocks, { live: false, last: isLastAssistant });
 
   // User turns that only carry tool results are internal plumbing.
-  if (blocks.every((b) => b.type === "tool_result")) return null;
-  const bubble = h("div", { class: "bubble" });
+  if (!isRealUserTurn(msg)) return null;
   const files = h("div", { class: "attachments" });
+  let text = "";
   for (const b of blocks) {
-    if (b.type === "text") bubble.append(h("div", { class: "plain" }, String(b.text)));
+    if (b.type === "text") text += String(b.text);
     if (b.type === "image") {
       const src = b.source as { media_type: string; data: string };
       files.append(h("img", { class: "thumb", src: `data:${src.media_type};base64,${src.data}`, alt: "imagem" }));
     }
-    if (b.type === "document") files.append(h("span", { class: "file-chip" }, `📄 ${String(b.title ?? "documento")}`));
+    if (b.type === "document") files.append(h("span", { class: "file-chip" }, icon("doc", 16), String(b.title ?? "documento")));
   }
-  return h("div", { class: "msg user" }, files.childElementCount ? files : null, bubble);
+  return h(
+    "div",
+    { class: "msg user" },
+    files.childElementCount ? files : null,
+    text ? h("div", { class: "bubble" }, text) : null,
+  );
 }
 
-function renderAssistantBlocks(blocks: AnyBlock[], live: boolean): HTMLElement {
-  const wrap = h("div", { class: "msg assistant" + (live ? " live" : "") });
+function renderAssistantBlocks(blocks: AnyBlock[], opts: { live: boolean; last: boolean }): HTMLElement {
+  const wrap = h("div", { class: "msg assistant" + (opts.live ? " live" : "") });
+  const bubble = h("div", { class: "bubble" });
   const sources = new Map<string, string>();
   let fullText = "";
 
@@ -230,24 +347,23 @@ function renderAssistantBlocks(blocks: AnyBlock[], live: boolean): HTMLElement {
       case "thinking": {
         const text = String(b.thinking ?? "").trim();
         if (text) {
-          wrap.append(
-            h("details", { class: "thinking" }, h("summary", {}, live ? "A pensar…" : "Raciocínio"), markdown(text)),
-          );
+          wrap.append(h("details", { class: "thinking" }, h("summary", {}, icon("sparkle", 14), opts.live ? "A pensar…" : "Raciocínio"), markdown(text)));
         }
         break;
       }
       case "text": {
         const text = String(b.text ?? "");
         fullText += text;
-        wrap.append(markdown(text));
+        bubble.append(markdown(text));
         for (const c of (b.citations as AnyBlock[] | null | undefined) ?? []) {
           if (typeof c.url === "string") sources.set(c.url, String(c.title ?? c.url));
         }
         break;
       }
       case "server_tool_use": {
-        const input = b.input as { query?: string } | undefined;
-        if (b.name === "web_search") wrap.append(h("div", { class: "tool-note" }, `🔎 A pesquisar: ${input?.query ?? "…"}`));
+        const input = b.input as { query?: string; url?: string } | undefined;
+        if (b.name === "web_search") wrap.append(h("div", { class: "tool-note" }, icon("search", 14), `A pesquisar “${input?.query ?? "…"}”`));
+        if (b.name === "web_fetch") wrap.append(h("div", { class: "tool-note" }, icon("globe", 14), `A ler ${input?.url ?? "página"}`));
         break;
       }
       case "web_search_tool_result": {
@@ -258,29 +374,44 @@ function renderAssistantBlocks(blocks: AnyBlock[], live: boolean): HTMLElement {
         break;
       }
       case "tool_use": {
-        const input = b.input as { fact?: string; id?: string } | undefined;
-        if (b.name === "memory_save") wrap.append(h("div", { class: "tool-note" }, `🧠 Memorizado: ${input?.fact ?? "…"}`));
-        if (b.name === "memory_delete") wrap.append(h("div", { class: "tool-note" }, "🧠 Memória apagada"));
+        const input = b.input as { fact?: string } | undefined;
+        if (b.name === "memory_save") wrap.append(h("div", { class: "tool-note" }, icon("brain", 14), `Memorizado: ${input?.fact ?? "…"}`));
+        if (b.name === "memory_delete") wrap.append(h("div", { class: "tool-note" }, icon("brain", 14), "Memória apagada"));
         break;
       }
       case "fallback":
-        wrap.append(h("div", { class: "tool-note" }, "↪︎ Resposta continuada por outro modelo"));
+        wrap.append(h("div", { class: "tool-note" }, "↪︎ Continuado por outro modelo"));
         break;
     }
   }
 
-  if (sources.size && !live) {
-    const list = h("div", { class: "sources" }, h("div", { class: "sources-title" }, "Fontes"));
+  if (bubble.childElementCount) wrap.append(bubble);
+
+  if (sources.size && !opts.live) {
+    const chips = h("div", { class: "sources" });
     let i = 1;
     for (const [url, title] of [...sources].slice(0, 8)) {
-      list.append(h("a", { href: url, target: "_blank", rel: "noopener noreferrer" }, `${i++}. ${title}`));
+      let host = url;
+      try {
+        host = new URL(url).hostname.replace(/^www\./, "");
+      } catch {
+        /* keep raw url */
+      }
+      chips.append(h("a", { class: "source", href: url, target: "_blank", rel: "noopener noreferrer", title }, h("span", { class: "source-n" }, String(i++)), host));
     }
-    wrap.append(list);
+    wrap.append(chips);
   }
-  if (fullText && !live) {
-    const btn = h("button", { class: "msg-action" }, "Copiar");
-    btn.addEventListener("click", () => copy(fullText, btn));
-    wrap.append(h("div", { class: "msg-actions" }, btn));
+
+  if (fullText && !opts.live) {
+    const actions = h("div", { class: "msg-actions" });
+    const copyBtn = iconButton("copy", "Copiar", () => copy(fullText, copyBtn), "action-btn");
+    actions.append(copyBtn);
+    if (canSpeak()) {
+      const speakBtn = iconButton("speaker", "Ler em voz alta", () => speak(fullText, speakBtn), "action-btn");
+      actions.append(speakBtn);
+    }
+    if (opts.last) actions.append(iconButton("retry", "Gerar outra resposta", regenerate, "action-btn"));
+    wrap.append(actions);
   }
   return wrap;
 }
@@ -289,16 +420,9 @@ function renderComposer(): HTMLElement {
   const input = h("textarea", {
     id: "prompt",
     rows: "1",
-    placeholder: state.settings.apiKey ? "Escreva uma mensagem…" : "Configure a chave de API ⚙️",
+    placeholder: state.settings.apiKey ? "Mensagem" : "Configure a chave de API",
+    "aria-label": "Mensagem",
   }) as HTMLTextAreaElement;
-  input.addEventListener("input", () => autoGrow(input));
-  input.addEventListener("keydown", (e) => {
-    const isTouch = matchMedia("(pointer: coarse)").matches;
-    if (e.key === "Enter" && !e.shiftKey && !isTouch) {
-      e.preventDefault();
-      send(input.value);
-    }
-  });
 
   const fileInput = h("input", {
     type: "file",
@@ -324,16 +448,39 @@ function renderComposer(): HTMLElement {
       h(
         "span",
         { class: "file-chip" },
-        a.preview ? h("img", { src: a.preview, alt: "" }) : null,
-        a.name,
-        h("button", { class: "chip-x", title: "Remover", onclick: () => { state.attachments.splice(i, 1); rerenderKeepingDraft(); } }, "✕"),
+        a.preview ? h("img", { src: a.preview, alt: "" }) : icon("doc", 16),
+        h("span", { class: "chip-name" }, a.name),
+        h("button", { class: "chip-x", "aria-label": "Remover", onclick: () => { state.attachments.splice(i, 1); rerenderKeepingDraft(); } }, icon("close", 14)),
       ),
     ),
   );
 
-  const action = state.busy
-    ? h("button", { class: "send stop", title: "Parar", onclick: () => state.abort?.abort() }, "■")
-    : h("button", { class: "send", title: "Enviar", onclick: () => send(input.value) }, "↑");
+  const sendBtn = iconButton("arrowUp", "Enviar", () => send(input.value), "send");
+  const micBtn = canDictate() ? iconButton("mic", "Ditar", () => toggleDictation(input), "icon-btn mic" + (state.dictation ? " recording" : "")) : null;
+  const stopBtn = iconButton("stop", "Parar", () => state.abort?.abort(), "send stop");
+
+  const syncButtons = () => {
+    const hasContent = input.value.trim().length > 0 || state.attachments.length > 0;
+    sendBtn.hidden = state.busy || (!hasContent && !!micBtn);
+    if (micBtn) micBtn.hidden = state.busy || hasContent;
+    stopBtn.hidden = !state.busy;
+  };
+  input.addEventListener("input", () => {
+    autoGrow(input);
+    syncButtons();
+  });
+  input.addEventListener("keydown", (e) => {
+    const isTouch = matchMedia("(pointer: coarse)").matches;
+    if (e.key === "Enter" && !e.shiftKey && !isTouch) {
+      e.preventDefault();
+      send(input.value);
+    }
+  });
+  syncButtons();
+
+  const conv = state.current;
+  const meta: Child[] = [];
+  if (conv?.usage) meta.push(`${formatCost(conv.usage.costUsd)} nesta conversa`);
 
   return h(
     "footer",
@@ -343,23 +490,36 @@ function renderComposer(): HTMLElement {
       "div",
       { class: "composer-row" },
       fileInput,
-      h("button", { class: "icon-btn", title: "Anexar ficheiros ou imagens", onclick: () => fileInput.click() }, "📎"),
-      input,
-      action,
+      iconButton("plus", "Anexar fotos ou ficheiros", () => fileInput.click(), "attach-btn"),
+      h("div", { class: "field" }, input, micBtn, sendBtn, stopBtn),
     ),
-    h(
-      "div",
-      { class: "composer-meta" },
-      `${MODELS.find((m) => m.id === (state.current?.model ?? state.settings.model))?.label.split(" (")[0]}`,
-      (state.current?.webSearch ?? state.settings.webSearch) ? " · 🔎 pesquisa web" : "",
-      (state.current?.memoryEnabled ?? state.settings.memoryEnabled) ? " · 🧠 memória" : "",
-    ),
+    meta.length ? h("div", { class: "composer-meta" }, ...meta) : null,
   );
+}
+
+function toggleDictation(input: HTMLTextAreaElement): void {
+  if (state.dictation) {
+    state.dictation.stop();
+    return;
+  }
+  const base = input.value ? input.value.replace(/\s*$/, " ") : "";
+  state.dictation = dictate(
+    (text) => {
+      input.value = base + text;
+      autoGrow(input);
+    },
+    () => {
+      state.dictation = null;
+      rerenderKeepingDraft();
+    },
+  );
+  haptic();
+  rerenderKeepingDraft();
 }
 
 function autoGrow(el: HTMLTextAreaElement): void {
   el.style.height = "auto";
-  el.style.height = Math.min(el.scrollHeight, 200) + "px";
+  el.style.height = Math.min(el.scrollHeight, 180) + "px";
 }
 
 function rerenderKeepingDraft(): void {
@@ -369,6 +529,7 @@ function rerenderKeepingDraft(): void {
   if (input) {
     input.value = draft;
     autoGrow(input);
+    input.dispatchEvent(new Event("input"));
   }
 }
 
@@ -384,7 +545,7 @@ function updateStreaming(): void {
   requestAnimationFrame(() => {
     rafPending = false;
     if (!state.streaming || !messagesEl) return;
-    const next = renderAssistantBlocks(state.streaming.content as unknown as AnyBlock[], true);
+    const next = renderAssistantBlocks(state.streaming.content as unknown as AnyBlock[], { live: true, last: false });
     if (streamingEl?.isConnected) streamingEl.replaceWith(next);
     else messagesEl.append(next);
     streamingEl = next;
@@ -400,18 +561,21 @@ async function refreshList(): Promise<void> {
 
 function newConversation(): void {
   if (state.busy) return;
+  stopSpeaking();
   state.current = null;
   state.attachments = [];
   state.notice = null;
-  document.body.classList.remove("drawer-open");
+  closeDrawer();
   render();
+  (document.getElementById("prompt") as HTMLTextAreaElement | null)?.focus();
 }
 
 function openConversation(id: string): void {
   if (state.busy) return;
+  stopSpeaking();
   state.current = state.conversations.find((c) => c.id === id) ?? null;
   state.notice = null;
-  document.body.classList.remove("drawer-open");
+  closeDrawer();
   render();
 }
 
@@ -435,6 +599,7 @@ function startConversation(firstText: string): Conversation {
     personaId: p.id,
     system: buildSystemPrompt(p, s.memoryEnabled, s.memoryEnabled ? loadMemories() : []),
     webSearch: s.webSearch,
+    webFetch: s.webSearch,
     memoryEnabled: s.memoryEnabled,
     messages: [],
   };
@@ -447,6 +612,8 @@ async function send(rawText: string): Promise<void> {
     openSettings();
     return;
   }
+  state.dictation?.stop();
+  haptic();
 
   const conv = state.current ?? startConversation(text);
   state.current = conv;
@@ -456,6 +623,22 @@ async function send(rawText: string): Promise<void> {
   ];
   conv.messages.push({ role: "user", content });
   state.attachments = [];
+  await respond(conv);
+}
+
+// Removing only trailing turns keeps every earlier thinking block valid.
+async function regenerate(): Promise<void> {
+  const conv = state.current;
+  if (!conv || state.busy) return;
+  let lastUser = conv.messages.length - 1;
+  while (lastUser >= 0 && !isRealUserTurn(conv.messages[lastUser])) lastUser--;
+  if (lastUser < 0) return;
+  conv.messages.splice(lastUser + 1);
+  haptic();
+  await respond(conv);
+}
+
+async function respond(conv: Conversation): Promise<void> {
   state.notice = null;
   state.busy = true;
   state.abort = new AbortController();
@@ -475,6 +658,9 @@ async function send(rawText: string): Promise<void> {
           state.streaming = null;
           await persist(conv);
           render();
+        },
+        onInfo: (text) => {
+          state.notice = { kind: "info", text };
         },
       },
       state.abort.signal,
@@ -510,171 +696,237 @@ async function persist(conv: Conversation): Promise<void> {
   await refreshList();
 }
 
-// ---------- modals ----------
+async function shareConversation(conv: Conversation): Promise<void> {
+  const text = conversationMarkdown(conv);
+  try {
+    if (navigator.share) {
+      await navigator.share({ title: conv.title, text });
+      return;
+    }
+  } catch {
+    /* cancelled or unsupported: fall back to a download */
+  }
+  const url = URL.createObjectURL(new Blob([text], { type: "text/markdown" }));
+  const a = h("a", { href: url, download: `${conv.title.replace(/[^\p{L}\p{N} ]/gu, "").trim() || "conversa"}.md` });
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
-function modal(title: string, body: HTMLElement, footer?: HTMLElement): { close: () => void } {
+// ---------- sheets (iOS-style modals) ----------
+
+function sheet(title: string, body: HTMLElement, action?: { label: string; onClick: () => void }): { close: () => void } {
   const overlay = h("div", { class: "overlay" });
-  const close = () => overlay.remove();
+  const close = () => {
+    overlay.classList.add("closing");
+    setTimeout(() => overlay.remove(), 200);
+  };
   overlay.addEventListener("click", (e) => e.target === overlay && close());
+  const actionBtn = action ? h("button", { class: "sheet-action", onclick: () => action.onClick() }, action.label) : h("span");
   overlay.append(
     h(
       "div",
-      { class: "dialog", role: "dialog", "aria-label": title },
-      h("div", { class: "dialog-head" }, h("h2", {}, title), h("button", { class: "icon-btn", title: "Fechar", onclick: close }, "✕")),
-      h("div", { class: "dialog-body" }, body),
-      footer ?? null,
+      { class: "sheet", role: "dialog", "aria-label": title },
+      h("div", { class: "grabber" }),
+      h("div", { class: "sheet-head" }, h("button", { class: "sheet-cancel", onclick: close }, action ? "Cancelar" : "Fechar"), h("h2", {}, title), actionBtn),
+      h("div", { class: "sheet-body" }, body),
     ),
   );
   document.body.append(overlay);
   return { close };
 }
 
+function group(header: string | null, rows: HTMLElement[], footer?: Child): HTMLElement {
+  return h(
+    "section",
+    { class: "group" },
+    header ? h("div", { class: "group-header" }, header) : null,
+    h("div", { class: "group-body" }, ...rows),
+    footer ? h("div", { class: "group-footer" }, footer) : null,
+  );
+}
+
+function switchRow(label: Child, checked: boolean, iconName: string, color: string): { row: HTMLElement; input: HTMLInputElement } {
+  const input = h("input", { type: "checkbox", class: "switch", checked, role: "switch" }) as HTMLInputElement;
+  const row = h("label", { class: "row" }, h("span", { class: "row-icon", style: `background:${color}` }, icon(iconName, 17)), h("span", { class: "row-label" }, label), input);
+  return { row, input };
+}
+
+function segmented<T extends string>(options: { value: T; label: string }[], current: T): { el: HTMLElement; value: () => T } {
+  let value = current;
+  const el = h("div", { class: "segmented", role: "radiogroup" });
+  const draw = () => {
+    el.replaceChildren(
+      ...options.map((o) =>
+        h("button", { class: "segment" + (o.value === value ? " selected" : ""), role: "radio", "aria-checked": String(o.value === value), onclick: () => { value = o.value; draw(); } }, o.label),
+      ),
+    );
+  };
+  draw();
+  return { el, value: () => value };
+}
+
 function openSettings(): void {
   const s = state.settings;
-  const key = h("input", { type: "password", value: s.apiKey, placeholder: "sk-ant-…", autocomplete: "off" }) as HTMLInputElement;
-  const model = h("select", {}, ...MODELS.map((m) => h("option", { value: m.id, selected: m.id === s.model }, m.label))) as HTMLSelectElement;
-  const effortLabels: Record<Effort, string> = { low: "Baixo (rápido)", medium: "Médio", high: "Alto (pensa mais)" };
-  const effort = h(
-    "select",
-    {},
-    ...(Object.keys(effortLabels) as Effort[]).map((e) => h("option", { value: e, selected: e === s.effort }, effortLabels[e])),
-  ) as HTMLSelectElement;
-  const web = h("input", { type: "checkbox", checked: s.webSearch }) as HTMLInputElement;
-  const mem = h("input", { type: "checkbox", checked: s.memoryEnabled }) as HTMLInputElement;
+  const key = h("input", { type: "password", value: s.apiKey, placeholder: "sk-ant-…", autocomplete: "off", class: "row-input" }) as HTMLInputElement;
+  const model = segmented(MODELS.map((m) => ({ value: m.id, label: m.short })), s.model);
+  const effort = segmented<Effort>(
+    [
+      { value: "low", label: "Rápido" },
+      { value: "medium", label: "Normal" },
+      { value: "high", label: "Profundo" },
+    ],
+    s.effort,
+  );
+  const turbo = switchRow(h("span", {}, "Modo Turbo", h("small", {}, "Respostas até 2,5× mais rápidas · só Opus · custa 2×")), s.turbo, "bolt", "#FF9500");
+  const web = switchRow(h("span", {}, "Internet", h("small", {}, "Pesquisa e leitura de links")), s.webSearch, "globe", "#007AFF");
+  const mem = switchRow(h("span", {}, "Memória", h("small", {}, "Lembrar-se de si entre conversas")), s.memoryEnabled, "brain", "#AF52DE");
 
   const body = h(
     "div",
-    { class: "form" },
-    h("label", {}, "Chave da API da Anthropic", key),
-    h(
-      "p",
-      { class: "hint" },
-      "Crie a chave em ",
-      h("a", { href: "https://console.anthropic.com/settings/keys", target: "_blank", rel: "noopener noreferrer" }, "console.anthropic.com"),
-      ". Fica guardada só neste dispositivo e é enviada apenas para a API da Anthropic.",
+    { class: "settings" },
+    group(
+      "Chave da API",
+      [h("div", { class: "row" }, key)],
+      h("span", {}, "Crie-a em ", h("a", { href: "https://console.anthropic.com/settings/keys", target: "_blank", rel: "noopener noreferrer" }, "console.anthropic.com"), ". Fica só neste dispositivo."),
     ),
-    h("label", {}, "Modelo", model),
-    h("label", {}, "Esforço de raciocínio", effort),
-    h("label", { class: "check" }, web, "Pesquisa na internet"),
-    h("label", { class: "check" }, mem, "Memória entre conversas"),
-    h("p", { class: "hint" }, "O modelo e as opções aplicam-se às novas conversas."),
+    group("Modelo", [h("div", { class: "row padded" }, model.el)], "Opus é o mais inteligente; Haiku o mais barato."),
+    group("Raciocínio", [h("div", { class: "row padded" }, effort.el)]),
+    group("Funcionalidades", [turbo.row, web.row, mem.row], "Aplicam-se às novas conversas. O Modo Turbo vale para todas."),
   );
-  const save = h("button", { class: "btn primary" }, "Guardar");
-  const { close } = modal("Definições", body, h("div", { class: "dialog-foot" }, save));
-  save.addEventListener("click", () => {
-    state.settings = {
-      ...s,
-      apiKey: key.value.trim(),
-      model: model.value as ModelId,
-      effort: effort.value as Effort,
-      webSearch: web.checked,
-      memoryEnabled: mem.checked,
-    };
-    saveSettings(state.settings);
-    close();
-    rerenderKeepingDraft();
+  const { close } = sheet("Definições", body, {
+    label: "OK",
+    onClick: () => {
+      state.settings = {
+        ...s,
+        apiKey: key.value.trim(),
+        model: model.value() as ModelId,
+        effort: effort.value(),
+        turbo: turbo.input.checked,
+        webSearch: web.input.checked,
+        memoryEnabled: mem.input.checked,
+      };
+      saveSettings(state.settings);
+      close();
+      rerenderKeepingDraft();
+    },
   });
 }
 
+function openConversationInfo(): void {
+  const conv = state.current;
+  if (!conv) return;
+  const u = conv.usage;
+  const rows = [
+    h("div", { class: "row" }, h("span", { class: "row-label" }, "Modelo"), h("span", { class: "row-value" }, MODELS.find((m) => m.id === conv.model)?.short ?? conv.model)),
+    h("div", { class: "row" }, h("span", { class: "row-label" }, "Persona"), h("span", { class: "row-value" }, `${persona(conv.personaId).emoji} ${persona(conv.personaId).name}`)),
+    h("div", { class: "row" }, h("span", { class: "row-label" }, "Custo estimado"), h("span", { class: "row-value" }, u ? formatCost(u.costUsd) : "—")),
+    h("div", { class: "row" }, h("span", { class: "row-label" }, "Tokens"), h("span", { class: "row-value" }, u ? `${(u.inputTokens + u.cacheReadTokens + u.cacheWriteTokens).toLocaleString("pt-PT")} ↑ · ${u.outputTokens.toLocaleString("pt-PT")} ↓` : "—")),
+    h("div", { class: "row" }, h("span", { class: "row-label" }, "Pesquisas web"), h("span", { class: "row-value" }, String(u?.webSearches ?? 0))),
+  ];
+  const actions = [
+    h("button", { class: "row button-row", onclick: () => shareConversation(conv) }, h("span", { class: "row-icon", style: "background:#34C759" }, icon("share", 17)), h("span", { class: "row-label" }, "Partilhar / exportar")),
+    h(
+      "button",
+      { class: "row button-row danger", onclick: async () => { close(); await removeConversation(conv.id); } },
+      h("span", { class: "row-icon", style: "background:#FF3B30" }, icon("trash", 17)),
+      h("span", { class: "row-label" }, "Apagar conversa"),
+    ),
+  ];
+  const { close } = sheet(conv.title, h("div", { class: "settings" }, group("Detalhes", rows, "Custo calculado a partir dos tokens usados (preços da API)."), group(null, actions)));
+}
+
 function openPersonas(): void {
-  const body = h("div", { class: "form" });
+  const body = h("div", { class: "settings" });
   const draw = () => {
-    body.replaceChildren();
-    for (const p of state.personas) {
+    const rows = state.personas.map((p) => {
       const active = p.id === state.settings.activePersonaId;
-      body.append(
+      return h(
+        "div",
+        { class: "row persona-row" },
         h(
-          "div",
-          { class: "row-item" + (active ? " active" : "") },
-          h(
-            "button",
-            {
-              class: "row-main",
-              onclick: () => {
-                state.settings.activePersonaId = p.id;
-                saveSettings(state.settings);
-                if (state.current && !state.current.messages.length) state.current = null;
-                draw();
-                if (!state.current) rerenderKeepingDraft();
-              },
+          "button",
+          {
+            class: "persona-main",
+            onclick: () => {
+              state.settings.activePersonaId = p.id;
+              saveSettings(state.settings);
+              haptic();
+              if (state.current && !state.current.messages.length) state.current = null;
+              draw();
+              if (!state.current) rerenderKeepingDraft();
             },
-            h("strong", {}, `${p.emoji} ${p.name}`),
-            h("span", { class: "muted small" }, p.prompt),
-          ),
-          p.builtIn
-            ? null
-            : h(
-                "button",
-                {
-                  class: "icon-btn small",
-                  title: "Apagar persona",
-                  onclick: () => {
-                    state.personas = state.personas.filter((x) => x.id !== p.id);
-                    saveCustomPersonas(state.personas);
-                    if (state.settings.activePersonaId === p.id) state.settings.activePersonaId = "default";
-                    saveSettings(state.settings);
-                    draw();
-                  },
-                },
-                "✕",
-              ),
+          },
+          h("span", { class: "avatar" }, p.emoji),
+          h("span", { class: "persona-text" }, h("span", { class: "persona-name" }, p.name), h("span", { class: "persona-prompt" }, p.prompt)),
+          active ? h("span", { class: "check" }, "✓") : null,
         ),
+        p.builtIn
+          ? null
+          : iconButton("trash", "Apagar persona", () => {
+              state.personas = state.personas.filter((x) => x.id !== p.id);
+              saveCustomPersonas(state.personas);
+              if (state.settings.activePersonaId === p.id) state.settings.activePersonaId = "default";
+              saveSettings(state.settings);
+              draw();
+            }, "icon-btn small delete"),
       );
-    }
-    const emoji = h("input", { value: "🤖", maxlength: "4", class: "emoji-input" }) as HTMLInputElement;
-    const name = h("input", { placeholder: "Nome (ex.: Chef de cozinha)" }) as HTMLInputElement;
-    const prompt = h("textarea", { rows: "3", placeholder: "Instruções: como deve comportar-se, tom, especialidade…" }) as HTMLTextAreaElement;
-    const add = h("button", { class: "btn" }, "Criar persona");
+    });
+    const emoji = h("input", { value: "🤖", maxlength: "4", class: "row-input emoji-input", "aria-label": "Emoji" }) as HTMLInputElement;
+    const name = h("input", { placeholder: "Nome (ex.: Chef de cozinha)", class: "row-input" }) as HTMLInputElement;
+    const prompt = h("textarea", { rows: "3", placeholder: "Como deve comportar-se: tom, especialidade, regras…", class: "row-input" }) as HTMLTextAreaElement;
+    const add = h("button", { class: "row button-row accent" }, h("span", { class: "row-label" }, "Criar persona"));
     add.addEventListener("click", () => {
       if (!name.value.trim() || !prompt.value.trim()) return;
       state.personas.push({ id: newId(), name: name.value.trim(), emoji: emoji.value.trim() || "🤖", prompt: prompt.value.trim() });
       saveCustomPersonas(state.personas);
+      haptic();
       draw();
     });
-    body.append(h("h3", {}, "Nova persona"), h("div", { class: "inline" }, emoji, name), prompt, add);
+    body.replaceChildren(
+      group("Escolha com quem falar", rows, "A persona aplica-se às novas conversas."),
+      group("Nova persona", [h("div", { class: "row" }, emoji, name), h("div", { class: "row" }, prompt), add]),
+    );
   };
   draw();
-  modal("Personas", body);
+  sheet("Personas", body);
 }
 
 function openMemories(): void {
-  const body = h("div", { class: "form" });
+  const body = h("div", { class: "settings" });
   const draw = () => {
     const memories = loadMemories();
-    body.replaceChildren(
-      h("p", { class: "hint" }, "O Claude guarda aqui factos sobre si quando lhe pedir ou quando forem úteis. As memórias entram nas novas conversas."),
-    );
-    if (!memories.length) body.append(h("p", { class: "muted" }, "Sem memórias guardadas."));
-    for (const m of memories) {
-      body.append(
-        h(
-          "div",
-          { class: "row-item" },
-          h("div", { class: "row-main" }, m.fact),
+    const rows = memories.length
+      ? memories.map((m) =>
           h(
-            "button",
-            { class: "icon-btn small", title: "Apagar", onclick: () => { saveMemories(loadMemories().filter((x) => x.id !== m.id)); draw(); } },
-            "✕",
+            "div",
+            { class: "row" },
+            h("span", { class: "row-label wrap" }, m.fact),
+            iconButton("trash", "Apagar", () => { saveMemories(loadMemories().filter((x) => x.id !== m.id)); draw(); }, "icon-btn small delete"),
           ),
-        ),
-      );
-    }
-    const fact = h("input", { placeholder: "Adicionar uma memória manualmente…" }) as HTMLInputElement;
-    const add = h("button", { class: "btn" }, "Adicionar");
+        )
+      : [h("div", { class: "row" }, h("span", { class: "row-label secondary" }, "Sem memórias guardadas."))];
+    const fact = h("input", { placeholder: "Adicionar uma memória…", class: "row-input" }) as HTMLInputElement;
+    const add = h("button", { class: "row button-row accent" }, h("span", { class: "row-label" }, "Adicionar"));
     add.addEventListener("click", () => {
       if (!fact.value.trim()) return;
       saveMemories([...loadMemories(), { id: newId().slice(0, 8), fact: fact.value.trim(), createdAt: Date.now() }]);
       draw();
     });
-    body.append(h("div", { class: "inline" }, fact, add));
+    const groups = [
+      group("O que o Claude sabe sobre si", rows, "O Claude guarda factos quando lhe pedir ou quando forem úteis. Entram nas novas conversas."),
+      group(null, [h("div", { class: "row" }, fact), add]),
+    ];
     if (memories.length) {
-      body.append(
-        h("button", { class: "btn ghost danger", onclick: () => { if (confirm("Apagar todas as memórias?")) { saveMemories([]); draw(); } } }, "Apagar todas"),
+      groups.push(
+        group(null, [
+          h("button", { class: "row button-row danger", onclick: () => { if (confirm("Apagar todas as memórias?")) { saveMemories([]); draw(); } } }, h("span", { class: "row-label" }, "Apagar todas")),
+        ]),
       );
     }
+    body.replaceChildren(...groups);
   };
   draw();
-  modal("Memória", body);
+  sheet("Memória", body);
 }
 
 // ---------- boot ----------

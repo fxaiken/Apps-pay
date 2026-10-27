@@ -6,7 +6,11 @@ App de chat com o Claude (Anthropic), para web e Android, com:
 - **Ficheiros e imagens**: fotos, PDFs e ficheiros de texto/código
 - **Personas**: assistentes com instruções próprias (incluídas: Assistente, Programador, Professor, Tradutor)
 - **Memória entre conversas**: o Claude guarda factos sobre si (pode ver e apagar em 🧠 Memória)
-- Respostas em tempo real, raciocínio visível, histórico guardado no dispositivo, tema claro/escuro
+- **Modo Turbo ⚡**: respostas até 2,5× mais rápidas com o Opus (custa o dobro)
+- **Leitura de links**: cole um URL e o Claude lê a página
+- **Gerar outra resposta**, **ler em voz alta** e **ditado por voz** (quando o browser suporta)
+- **Pesquisa nas conversas**, **partilhar/exportar** em Markdown e **custo estimado** por conversa
+- Design ao estilo Apple (iOS): balões do iMessage, barras translúcidas, painéis e interruptores do iOS, modo claro/escuro
 
 ## Chave de API
 

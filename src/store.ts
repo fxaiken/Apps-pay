@@ -10,6 +10,8 @@ export interface Settings {
   webSearch: boolean;
   memoryEnabled: boolean;
   activePersonaId: string;
+  /** Fast mode (Opus 5.5 only): faster output at premium pricing. */
+  turbo: boolean;
 }
 
 export interface Persona {
@@ -26,6 +28,15 @@ export interface Memory {
   createdAt: number;
 }
 
+export interface UsageTotals {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  webSearches: number;
+  costUsd: number;
+}
+
 export interface Conversation {
   id: string;
   title: string;
@@ -37,18 +48,21 @@ export interface Conversation {
   // would invalidate earlier thinking blocks and the prompt cache.
   system: string;
   webSearch: boolean;
+  /** Absent on conversations created before link reading existed; their tool set stays unchanged. */
+  webFetch?: boolean;
   memoryEnabled: boolean;
   messages: Anthropic.Beta.BetaMessageParam[];
+  usage?: UsageTotals;
 }
 
 const SETTINGS_KEY = "cc.settings";
 const PERSONAS_KEY = "cc.personas";
 const MEMORIES_KEY = "cc.memories";
 
-export const MODELS: { id: ModelId; label: string }[] = [
-  { id: "claude-opus-5-5", label: "Claude Opus 5.5 (mais inteligente)" },
-  { id: "claude-sonnet-5-5", label: "Claude Sonnet 5.5 (equilibrado)" },
-  { id: "claude-haiku-5-5", label: "Claude Haiku 5.5 (rápido e barato)" },
+export const MODELS: { id: ModelId; label: string; short: string }[] = [
+  { id: "claude-opus-5-5", label: "Claude Opus 5.5 (mais inteligente)", short: "Opus 5.5" },
+  { id: "claude-sonnet-5-5", label: "Claude Sonnet 5.5 (equilibrado)", short: "Sonnet 5.5" },
+  { id: "claude-haiku-5-5", label: "Claude Haiku 5.5 (rápido e barato)", short: "Haiku 5.5" },
 ];
 
 export const BUILT_IN_PERSONAS: Persona[] = [
@@ -92,6 +106,7 @@ const DEFAULT_SETTINGS: Settings = {
   webSearch: true,
   memoryEnabled: true,
   activePersonaId: "default",
+  turbo: false,
 };
 
 function readJson<T>(key: string, fallback: T): T {

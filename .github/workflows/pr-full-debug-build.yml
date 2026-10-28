@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: pr-full-debug-build-${{ github.event.pull_request.number || github.ref }}
@@ -44,6 +44,20 @@ jobs:
             touch local.properties
           fi
 
+      # A stable signing key (kept in the Actions cache, never in the repo) so each new
+      # APK installs over the previous one.
+      - name: Restore signing key
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: nuvio-appletv-signing-key-v1
+
+      - name: Ensure signing key
+        run: |
+          mkdir -p ~/.android
+          [ -f ~/.android/debug.keystore ] || keytool -genkeypair -keystore ~/.android/debug.keystore -storepass android \
+            -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Nuvio,O=Nuvio,C=PT"
+
       - name: Build fullDebug APK
         run: ./gradlew :androidApp:assembleFullDebug -Pnuvio.android.distribution=full -Pnuvio.ios.distribution=appstore --stacktrace
 
@@ -54,3 +68,21 @@ jobs:
           archive: false
           if-no-files-found: error
           retention-days: 7
+
+      - name: Rename APK for release
+        if: github.event_name == 'push'
+        run: cp androidApp/build/outputs/apk/full/debug/androidApp-full-debug.apk nuvio-appletv.apk
+
+      - name: Publish release
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nuvio-appletv-v${{ github.run_number }}
+          name: Nuvio estilo Apple TV (build ${{ github.run_number }})
+          target_commitish: ${{ github.sha }}
+          prerelease: true
+          make_latest: false
+          files: nuvio-appletv.apk
+          body: |
+            Nuvio para Android com o ecrã inicial ao estilo Apple TV.
+            Se tiver o Nuvio da Play Store instalado, desinstale-o primeiro (as assinaturas são diferentes).

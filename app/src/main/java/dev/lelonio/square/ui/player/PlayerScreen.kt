@@ -1175,6 +1175,18 @@ fun PlayerScreen(
                             backdrop = lowerBackdrop,
                             modifier = Modifier.retreat(chrome),
                             showCover = !sideways,
+                            onDevices = if (connectAvailable) {
+                                {
+                                    panel = if (panel == PlayerPanel.DEVICES) {
+                                        PlayerPanel.NONE
+                                    } else {
+                                        onOpenDevices()
+                                        PlayerPanel.DEVICES
+                                    }
+                                }
+                            } else {
+                                null
+                            },
                         )
                     }
                     val stageBlock: @Composable ColumnScope.() -> Unit = {

@@ -36,6 +36,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.height
+import androidx.compose.runtime.mutableFloatStateOf
+import com.adamglin.phosphoricons.fill.Quotes
+import com.adamglin.phosphoricons.regular.Quotes
+import com.adamglin.phosphoricons.fill.Broadcast
+import com.adamglin.phosphoricons.regular.Broadcast
+import com.adamglin.phosphoricons.fill.ListBullets
+import com.adamglin.phosphoricons.regular.ListBullets
+import com.adamglin.phosphoricons.fill.SpeakerLow
+import com.adamglin.phosphoricons.fill.SpeakerHigh
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -114,6 +128,8 @@ fun PlayerPanelSection(
     modifier: Modifier = Modifier,
     /** False on a phone held sideways, where the cover is beside the views already. */
     showCover: Boolean = true,
+    /** Opens the Connect devices; null where there are none to offer. */
+    onDevices: (() -> Unit)? = null,
 ) {
     Column(
         modifier.fillMaxWidth(),
@@ -157,64 +173,170 @@ fun PlayerPanelSection(
         val selectedState = rememberUpdatedState(selected)
         val selectedTabIndex = remember { { selectedState.value } }
 
-        LiquidBottomTabs(
-            selectedTabIndex = selectedTabIndex,
-            onTabSelected = { onSelect(views[it]) },
-            backdrop = backdrop,
-            tabsCount = views.size,
-            accentColor = GlassInk,
-            containerColor = LocalPlayerFilm.current,
-            // Lit, whatever the phone's theme. The player's film is dark in
-            // both, and the default follows the theme: on a light phone it
-            // darkened a slot of an already dark bar and could hardly be seen.
-            indicatorColor = GlassInk.copy(alpha = 0.18f),
-            // Slimmer than the tab bar, and icon-only. This one sits under the
-            // transport rather than at the edge of the window, so it has to
-            // read as a smaller thing than the app's own navigation.
-            height = 42.dp,
-            // Under half the height, or the refraction from the two long edges
-            // meets in the middle and draws a seam across the capsule.
-            lensDepth = 12.dp,
-            modifier = Modifier
-                .fillMaxWidth(0.84f)
+        // FRAME MUSIC: Apple Music's foot of the player — the volume on a thin
+        // line between two speakers, then the views as bare glyphs in a row,
+        // the open one sitting in a faint disc.
+        VolumeRow(
+            Modifier
+                .fillMaxWidth()
+                .padding(top = 18.dp, start = 4.dp, end = 4.dp),
+        )
+        androidx.compose.foundation.layout.Row(
+            Modifier
+                .fillMaxWidth()
                 .padding(top = 14.dp),
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (showCover) PanelTab(
-                icon = PhosphorIcons.Regular.VinylRecord,
-                activeIcon = PhosphorIcons.Fill.VinylRecord,
-                label = stringResource(R.string.cover),
-                selected = selected == views.indexOf(PlayerPanel.NONE),
-            ) { onSelect(PlayerPanel.NONE) }
-            PanelTab(
-                icon = PhosphorIcons.Regular.TextAa,
-                activeIcon = PhosphorIcons.Fill.TextAa,
+            AppleViewButton(
+                icon = PhosphorIcons.Regular.Quotes,
+                activeIcon = PhosphorIcons.Fill.Quotes,
                 label = stringResource(R.string.lyrics),
-                selected = selected == views.indexOf(PlayerPanel.LYRICS),
-                // The karaoke lives in this view and keeps working with the
-                // panel shut; see the same halo on the effects tab.
+                selected = panel == PlayerPanel.LYRICS,
                 marked = karaokeOn,
-            ) { onSelect(PlayerPanel.LYRICS) }
-            PanelTab(
-                icon = PhosphorIcons.Regular.Queue,
-                activeIcon = PhosphorIcons.Fill.Queue,
-                label = stringResource(R.string.queue),
-                selected = selected == views.indexOf(PlayerPanel.QUEUE),
-            ) { onSelect(PlayerPanel.QUEUE) }
-            if (!sdkPlayback) PanelTab(
+            ) { onSelect(if (panel == PlayerPanel.LYRICS && showCover) PlayerPanel.NONE else PlayerPanel.LYRICS) }
+            if (!sdkPlayback) AppleViewButton(
                 icon = PhosphorIcons.Regular.SlidersHorizontal,
                 activeIcon = PhosphorIcons.Fill.SlidersHorizontal,
                 label = stringResource(R.string.effects),
-                selected = selected == views.indexOf(PlayerPanel.EFFECTS),
+                selected = panel == PlayerPanel.EFFECTS,
                 marked = effectsOn,
-            ) { onSelect(PlayerPanel.EFFECTS) }
-            PanelTab(
+            ) { onSelect(if (panel == PlayerPanel.EFFECTS && showCover) PlayerPanel.NONE else PlayerPanel.EFFECTS) }
+            if (onDevices != null) AppleViewButton(
+                icon = PhosphorIcons.Regular.Broadcast,
+                activeIcon = PhosphorIcons.Fill.Broadcast,
+                label = stringResource(R.string.play_on),
+                selected = panel == PlayerPanel.DEVICES,
+                onClick = onDevices,
+            )
+            AppleViewButton(
                 icon = PhosphorIcons.Regular.Info,
                 activeIcon = PhosphorIcons.Fill.Info,
                 label = stringResource(R.string.credits),
-                selected = selected == views.indexOf(PlayerPanel.INFO),
-            ) { onSelect(PlayerPanel.INFO) }
+                selected = panel == PlayerPanel.INFO,
+            ) { onSelect(if (panel == PlayerPanel.INFO && showCover) PlayerPanel.NONE else PlayerPanel.INFO) }
+            AppleViewButton(
+                icon = PhosphorIcons.Regular.ListBullets,
+                activeIcon = PhosphorIcons.Fill.ListBullets,
+                label = stringResource(R.string.queue),
+                selected = panel == PlayerPanel.QUEUE,
+            ) { onSelect(if (panel == PlayerPanel.QUEUE && showCover) PlayerPanel.NONE else PlayerPanel.QUEUE) }
         }
 
+    }
+}
+
+/** One of the player's views, drawn as Apple Music draws it: a bare glyph. */
+@Composable
+private fun AppleViewButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    activeIcon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    selected: Boolean,
+    marked: Boolean = false,
+    onClick: () -> Unit,
+) {
+    val lit by androidx.compose.animation.core.animateFloatAsState(
+        if (selected) 1f else 0f,
+        androidx.compose.animation.core.spring(dampingRatio = 0.7f, stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow),
+        label = "viewLit",
+    )
+    androidx.compose.foundation.layout.Box(
+        Modifier
+            .size(44.dp)
+            .pressable(onClick, shape = androidx.compose.foundation.shape.CircleShape, pressedScale = 0.86f),
+        contentAlignment = Alignment.Center,
+    ) {
+        androidx.compose.foundation.layout.Box(
+            Modifier
+                .size(40.dp)
+                .graphicsLayer {
+                    alpha = maxOf(lit, if (marked) 0.45f else 0f)
+                    scaleX = 0.8f + 0.2f * lit
+                    scaleY = 0.8f + 0.2f * lit
+                }
+                .background(GlassInk.copy(alpha = 0.18f), androidx.compose.foundation.shape.CircleShape),
+        )
+        Icon(
+            imageVector = if (selected) activeIcon else icon,
+            contentDescription = label,
+            tint = if (selected) GlassInk else GlassInk.copy(alpha = 0.72f),
+            modifier = Modifier.size(22.dp),
+        )
+    }
+}
+
+/**
+ * The phone's media volume on a thin line, as Apple Music has it under the
+ * transport. Read back from the system every half second while untouched, so
+ * the hardware keys move it too.
+ */
+@Composable
+private fun VolumeRow(modifier: Modifier = Modifier) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val audio = remember { context.getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager }
+    val max = remember { audio.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC).coerceAtLeast(1) }
+    var level by remember { mutableFloatStateOf(audio.getStreamVolume(android.media.AudioManager.STREAM_MUSIC) / max.toFloat()) }
+    var dragging by remember { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(dragging) {
+        while (!dragging) {
+            level = audio.getStreamVolume(android.media.AudioManager.STREAM_MUSIC) / max.toFloat()
+            kotlinx.coroutines.delay(500)
+        }
+    }
+    val grow by androidx.compose.animation.core.animateFloatAsState(
+        if (dragging) 1f else 0f,
+        androidx.compose.animation.core.spring(dampingRatio = 0.7f),
+        label = "volumeGrow",
+    )
+    fun set(fraction: Float) {
+        level = fraction.coerceIn(0f, 1f)
+        audio.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, kotlin.math.round(level * max).toInt(), 0)
+    }
+    androidx.compose.foundation.layout.Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+            PhosphorIcons.Fill.SpeakerLow,
+            contentDescription = null,
+            tint = GlassInk.copy(alpha = 0.6f),
+            modifier = Modifier.size(16.dp),
+        )
+        androidx.compose.foundation.layout.Box(
+            Modifier
+                .weight(1f)
+                .height(28.dp)
+                .padding(horizontal = 10.dp)
+                .pointerInput(Unit) {
+                    detectHorizontalDragGestures(
+                        onDragStart = { dragging = true; set(it.x / size.width) },
+                        onDragEnd = { dragging = false },
+                        onDragCancel = { dragging = false },
+                    ) { change, _ -> set(change.position.x / size.width) }
+                }
+                .pointerInput(Unit) { detectTapGestures { set(it.x / size.width) } },
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            val track = (6f + 6f * grow).dp
+            androidx.compose.foundation.layout.Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(track)
+                    .clip(androidx.compose.foundation.shape.CircleShape)
+                    .background(GlassInk.copy(alpha = 0.22f)),
+            )
+            androidx.compose.foundation.layout.Box(
+                Modifier
+                    .fillMaxWidth(level)
+                    .height(track)
+                    .clip(androidx.compose.foundation.shape.CircleShape)
+                    .background(GlassInk.copy(alpha = 0.6f + 0.4f * grow)),
+            )
+        }
+        Icon(
+            PhosphorIcons.Fill.SpeakerHigh,
+            contentDescription = null,
+            tint = GlassInk.copy(alpha = 0.6f),
+            modifier = Modifier.size(16.dp),
+        )
     }
 }
 

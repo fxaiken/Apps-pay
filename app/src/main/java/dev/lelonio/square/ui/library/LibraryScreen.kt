@@ -68,6 +68,7 @@ import dev.lelonio.square.ui.theme.InkDim
 import dev.lelonio.square.ui.theme.softShadow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.launch
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInRoot
 import dev.lelonio.square.ui.components.CHOICE_MENU_WIDTH
@@ -161,6 +162,8 @@ fun LibraryScreen(
     onUseYouTube: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
     listeningEvents: List<dev.lelonio.square.data.ListeningEvent>? = null,
+    /** FRAME MUSIC: asks for the library again after songs were added. */
+    onLibraryChanged: () -> Unit = {},
     /** Whether those were played from Spotify, rather than YouTube Music. */
     listeningFromSpotify: Boolean = true,
     backdrop: Backdrop,
@@ -299,7 +302,24 @@ fun LibraryScreen(
             val appleTop = filter == Filter.ALL && query.isBlank()
             val artistUris = remember(artists) { artists.map { it.uri }.toSet() }
             val likedSongs = state.playlists.firstOrNull { it.uri.endsWith(":collection") }
+            // FRAME MUSIC: the listener's own files, on YouTube Music.
+            val context = LocalContext.current
+            val addScope = androidx.compose.runtime.rememberCoroutineScope()
+            val myMusicName = stringResource(R.string.my_music)
+            val pickMusic = androidx.activity.compose.rememberLauncherForActivityResult(
+                androidx.activity.result.contract.ActivityResultContracts.OpenMultipleDocuments(),
+            ) { files ->
+                if (files.isNotEmpty()) addScope.launch {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        dev.lelonio.square.backend.youtube.MyMusic.add(context, files, myMusicName)
+                    }
+                    onLibraryChanged()
+                }
+            }
             val shortcuts = listOfNotNull(
+                LibraryShortcut(LibraryGlyphs.add, stringResource(R.string.add_music)) {
+                    pickMusic.launch(arrayOf("audio/*"))
+                }.takeIf { !listeningFromSpotify },
                 LibraryShortcut(LibraryGlyphs.playlists, stringResource(R.string.playlists)) { filter = Filter.PLAYLISTS },
                 LibraryShortcut(LibraryGlyphs.artists, stringResource(R.string.artists)) { filter = Filter.ARTISTS }
                     .takeIf { artists.isNotEmpty() },

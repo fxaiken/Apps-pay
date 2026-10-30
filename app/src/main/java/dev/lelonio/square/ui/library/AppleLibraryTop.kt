@@ -32,6 +32,7 @@ import com.adamglin.phosphoricons.regular.CaretRight
 import com.adamglin.phosphoricons.regular.MicrophoneStage
 import com.adamglin.phosphoricons.regular.MusicNote
 import com.adamglin.phosphoricons.regular.Playlist
+import com.adamglin.phosphoricons.regular.PlusCircle
 import com.adamglin.phosphoricons.regular.VinylRecord
 import com.adamglin.phosphoricons.regular.Waveform
 import dev.lelonio.square.R
@@ -163,4 +164,5 @@ internal object LibraryGlyphs {
     val albums get() = PhosphorIcons.Regular.VinylRecord
     val songs get() = PhosphorIcons.Regular.MusicNote
     val podcasts get() = PhosphorIcons.Regular.Waveform
+    val add get() = PhosphorIcons.Regular.PlusCircle
 }

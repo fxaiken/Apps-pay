@@ -656,4 +656,6 @@
     <string name="podcasts">Podcasts</string>
     <string name="new_episodes">Novos episódios dos seus podcasts</string>
     <string name="podcast_count">%1$d podcasts</string>
+    <string name="add_music">Adicionar músicas</string>
+    <string name="my_music">As minhas músicas</string>
 </resources>

@@ -568,7 +568,7 @@ class YouTubeBackend(private val account: YouTubeAccount) : MusicBackend {
             uri.startsWith(TRACK_PREFIX) || uri.startsWith(VIDEO_PREFIX) -> emptyList()
 
             // FRAME MUSIC: SoundCloud, kept on the phone.
-            SoundCloud.owns(uri) -> emptyList()
+            SoundCloud.owns(uri) || MyMusic.owns(uri) -> emptyList()
             id == SoundCloud.LIBRARY_ID -> SoundCloud.saved()
             LocalPlaylists.owns(id) -> LocalPlaylists.tracks(id)
 

@@ -1948,6 +1948,7 @@ fun SquareApp(
                                 onGoOffline = viewModel::goOffline,
                                 onLogOut = viewModel::logOut,
                                 onOpenPlaylist = openList,
+                                onLibraryChanged = { viewModel.refresh(restart = true) },
                                 listeningEvents = listeningEvents,
                                 listeningFromSpotify = backend == dev.lelonio.square.backend.BackendId.SPOTIFY,
                                 playlistOrder = playlistOrder,

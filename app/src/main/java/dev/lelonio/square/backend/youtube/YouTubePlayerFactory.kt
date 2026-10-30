@@ -397,6 +397,8 @@ private class YouTubeStreamResolver(
         val uri = dataSpec.uri.toString()
         // FRAME MUSIC: a SoundCloud song opens on its HLS playlist.
         if (SoundCloud.owns(uri)) return dataSpec.withUri(android.net.Uri.parse(SoundCloud.streamUrl(uri)))
+        // FRAME MUSIC: a song the listener added from their own files.
+        if (MyMusic.owns(uri)) return dataSpec.withUri(MyMusic.contentUriOf(uri))
         if (!uri.startsWith(YouTubeBackend.TRACK_PREFIX) && !uri.startsWith(YouTubeBackend.VIDEO_PREFIX)) {
             return dataSpec
         }

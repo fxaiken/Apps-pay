@@ -150,8 +150,14 @@ open class MainActivity : AppCompatActivity() {
         EpisodeReleaseNotificationPlatform.bindActivity(this)
         handleIncomingAppIntent(intent)
 
-        setContent {
-            App()
+        // If the app crashed last time, show the copyable report before loading the UI.
+        val reportShown = com.nuvio.app.core.diagnostics.FrameCrashReporter.showPendingReport(this) {
+            setContent { App() }
+        }
+        if (!reportShown) {
+            setContent {
+                App()
+            }
         }
     }
 

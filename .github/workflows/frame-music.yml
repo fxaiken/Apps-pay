@@ -1,0 +1,99 @@
+name: FRAME MUSIC (Metrolist)
+
+# Every push to frame-music-v2 builds the release APK (izzy flavour: no Cast,
+# no Metrolist updater), signs it with the FRAME MUSIC key kept in the Actions
+# cache and publishes it as a pre-release. A failed build publishes its errors.
+on:
+  push:
+    branches: [frame-music-v2]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: frame-music-v2-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: temurin
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build
+        run: |
+          set -o pipefail
+          chmod +x gradlew
+          ./gradlew --console=plain assembleIzzyRelease -x lint 2>&1 | tee build.log
+
+      - name: Restore FRAME MUSIC signing key
+        id: signing-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.framemusic-signing
+          key: framemusic-signing-v1
+
+      - name: Sign
+        id: sign
+        run: |
+          mkdir -p ~/.framemusic-signing
+          KS=~/.framemusic-signing/framemusic.keystore
+          if [ ! -f "$KS" ]; then
+            keytool -genkeypair -keystore "$KS" -storetype PKCS12 -storepass framemusic -alias framemusic \
+              -keypass framemusic -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=FRAME MUSIC,O=FRAME,C=PT"
+          fi
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          ls app/build/outputs/apk/izzy/release/
+          src=$(ls app/build/outputs/apk/izzy/release/*.apk | head -1)
+          "$BT/zipalign" -f -p 4 "$src" aligned.apk
+          "$BT/apksigner" sign --ks "$KS" --ks-pass pass:framemusic --ks-key-alias framemusic --key-pass pass:framemusic \
+            --out frame-music.apk aligned.apk
+          ls -la frame-music.apk
+          "$BT/apksigner" verify --print-certs frame-music.apk | tee certs.txt
+          echo "fingerprint=$(grep -m1 'SHA-256' certs.txt | awk '{print $NF}')" >> "$GITHUB_OUTPUT"
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: frame-music2-v${{ github.run_number }}
+          name: FRAME MUSIC 2 (build ${{ github.run_number }})
+          target_commitish: ${{ github.sha }}
+          prerelease: true
+          make_latest: false
+          files: frame-music.apk
+          body: |
+            Assinatura (SHA-256): ${{ steps.sign.outputs.fingerprint }}
+
+            FRAME MUSIC sobre o Metrolist (GPL-3.0); o código-fonte está neste repositório.
+
+      - name: Collect build errors
+        if: failure()
+        shell: bash
+        run: |
+          {
+            echo "A compilação falhou no commit ${GITHUB_SHA}."
+            echo
+            echo '```'
+            grep -E "^e: |error:|What went wrong|Could not resolve|> " build.log | head -120 || true
+            echo '```'
+          } > build-errors.md
+
+      - name: Publish build errors
+        if: failure()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: frame-music2-build-failed-${{ github.run_number }}
+          name: FRAME MUSIC 2 — erro de compilação (build ${{ github.run_number }})
+          target_commitish: ${{ github.sha }}
+          prerelease: true
+          make_latest: false
+          body_path: build-errors.md

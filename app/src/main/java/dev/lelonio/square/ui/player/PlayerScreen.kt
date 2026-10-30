@@ -128,14 +128,19 @@ import com.adamglin.phosphoricons.regular.DeviceRotate
 import com.adamglin.phosphoricons.Fill
 import com.adamglin.phosphoricons.Regular
 import com.adamglin.phosphoricons.fill.Heart
+import com.adamglin.phosphoricons.fill.Star
 import com.adamglin.phosphoricons.fill.Pause
 import com.adamglin.phosphoricons.fill.MicrophoneStage
 import com.adamglin.phosphoricons.fill.Play
 import com.adamglin.phosphoricons.fill.SkipBack
+import com.adamglin.phosphoricons.fill.Rewind
+import com.adamglin.phosphoricons.fill.FastForward
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import com.adamglin.phosphoricons.fill.SkipForward
 import com.adamglin.phosphoricons.regular.CaretDown
 import com.adamglin.phosphoricons.regular.Devices
 import com.adamglin.phosphoricons.regular.Heart
+import com.adamglin.phosphoricons.regular.Star
 import com.adamglin.phosphoricons.regular.Check
 import com.adamglin.phosphoricons.regular.Plus
 import com.adamglin.phosphoricons.regular.Broadcast
@@ -1664,11 +1669,10 @@ fun PlayerScreen(
 
                         // Title and artist on their own capsule, with the two
                         // per-track actions on the right.
-                        GlassSurface(
-                            backdrop = lowerBackdrop,
-                            surfaceColor = LocalPlayerFilm.current,
-                            shape = RoundedCornerShape(50),
-                            modifier = Modifier
+                        // FRAME MUSIC: as in Apple Music, the title sits on the
+                        // page itself and only its two buttons are glass.
+                        Box(
+                            Modifier
                                 .retreat(chrome)
                                 .fillMaxWidth()
                                 // Measured at rest only. Folding away moves
@@ -1679,7 +1683,7 @@ fun PlayerScreen(
                                 .sharedPill(sharedScope, animatedScope),
                         ) {
                             Row(
-                                Modifier.padding(start = 22.dp, end = 10.dp, top = 12.dp, bottom = 12.dp),
+                                Modifier.padding(start = 4.dp, top = 8.dp, bottom = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 TitleBlock(
@@ -1747,10 +1751,10 @@ fun PlayerScreen(
                                     val hearts = onToggleLike != null
                                     Icon(
                                         when {
-                                            hearts && inLikedSongs -> PhosphorIcons.Fill.Heart
+                                            hearts && inLikedSongs -> PhosphorIcons.Fill.Star
                                             alreadySaved -> PhosphorIcons.Regular.Check
                                             !hearts -> PhosphorIcons.Regular.Plus
-                                            else -> PhosphorIcons.Regular.Heart
+                                            else -> PhosphorIcons.Regular.Star
                                         },
                                         contentDescription = stringResource(
                                             when {
@@ -2553,66 +2557,56 @@ internal fun Controls(
         // gives the transport its own row of circles rather than icons on a bar,
         // and the size difference is the only thing marking the primary action —
         // no fill, no accent.
-        RoundGlassButton(
-            backdrop = backdrop,
-            size = 62.dp,
+        // FRAME MUSIC: Apple Music's transport — bare glyphs, rewind and fast
+        // forward either side of a large pause, and only a soft disc of light
+        // behind the glyph while a finger is on it.
+        AppleTransportButton(
+            size = 64.dp,
             enabled = state.hasPrevious,
             onClick = onPrevious,
         ) {
             Icon(
-                PhosphorIcons.Fill.SkipBack,
+                PhosphorIcons.Fill.Rewind,
                 contentDescription = stringResource(R.string.previous),
-                modifier = Modifier.size(30.dp),
+                modifier = Modifier.size(38.dp),
             )
         }
 
-        // Ringed while a playlist plays as a Spotify Mix, as the official
-        // player's button is; see Mixes.playing.
         val mixPlaying by dev.lelonio.square.playback.Mixes.playing.collectAsStateWithLifecycle()
         Box(Modifier.mixRing(mixPlaying)) {
-        RoundGlassButton(backdrop = backdrop, size = 76.dp, onClick = onTogglePlay) {
-            // A ring around the icon while the track is still being fetched.
-            //
-            // Worth its place here and nowhere else: a YouTube track has to have
-            // its stream resolved before a single byte can be read, which takes
-            // long enough that a tap on play looks like it did nothing at all.
-            // Around the button rather than in place of it, so the control stays
-            // where it is and stays pressable.
-            // A Box, because the button lays its content out in a row and the
-            // ring belongs *around* the icon rather than beside it.
-            Box(contentAlignment = Alignment.Center) {
-                if (state.isBuffering) {
-                    CircularProgressIndicator(
-                        color = LocalContentColor.current.copy(alpha = 0.5f),
-                        strokeWidth = 2.dp,
-                        modifier = Modifier.size(52.dp),
-                    )
-                }
-                Crossfade(
-                    state.wantsPlay,
-                    animationSpec = tween(180),
-                    label = "playPause",
-                ) { playing ->
-                    Icon(
-                        imageVector = if (playing) PhosphorIcons.Fill.Pause else PhosphorIcons.Fill.Play,
-                        contentDescription = stringResource(if (playing) R.string.pause else R.string.play),
-                        modifier = Modifier.size(34.dp),
-                    )
+            AppleTransportButton(size = 80.dp, onClick = onTogglePlay) {
+                Box(contentAlignment = Alignment.Center) {
+                    if (state.isBuffering) {
+                        CircularProgressIndicator(
+                            color = LocalContentColor.current.copy(alpha = 0.5f),
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.size(60.dp),
+                        )
+                    }
+                    Crossfade(
+                        state.wantsPlay,
+                        animationSpec = tween(180),
+                        label = "playPause",
+                    ) { playing ->
+                        Icon(
+                            imageVector = if (playing) PhosphorIcons.Fill.Pause else PhosphorIcons.Fill.Play,
+                            contentDescription = stringResource(if (playing) R.string.pause else R.string.play),
+                            modifier = Modifier.size(48.dp),
+                        )
+                    }
                 }
             }
         }
-        }
 
-        RoundGlassButton(
-            backdrop = backdrop,
-            size = 62.dp,
+        AppleTransportButton(
+            size = 64.dp,
             enabled = state.hasNext,
             onClick = onNext,
         ) {
             Icon(
-                PhosphorIcons.Fill.SkipForward,
+                PhosphorIcons.Fill.FastForward,
                 contentDescription = stringResource(R.string.next),
-                modifier = Modifier.size(30.dp),
+                modifier = Modifier.size(38.dp),
             )
         }
 
@@ -2681,6 +2675,58 @@ private fun KaraokeBadge(amount: Float, backdrop: Backdrop, onClick: () -> Unit)
             color = GlassInk,
             modifier = Modifier.padding(start = 6.dp),
         )
+    }
+}
+
+/**
+ * A transport control drawn the way Apple Music draws it: no plate at rest; a
+ * press brings up a faint disc and squeezes the glyph, and both spring back.
+ */
+@Composable
+private fun AppleTransportButton(
+    size: Dp,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val press by animateFloatAsState(
+        if (pressed) 1f else 0f,
+        spring(dampingRatio = 0.62f, stiffness = Spring.StiffnessMediumLow),
+        label = "transportPress",
+    )
+    Box(
+        Modifier
+            .size(size)
+            .graphicsLayer { alpha = if (enabled) 1f else 0.4f }
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                enabled = enabled,
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            Modifier
+                .matchParentSize()
+                .graphicsLayer {
+                    alpha = press
+                    scaleX = 0.7f + 0.3f * press
+                    scaleY = 0.7f + 0.3f * press
+                }
+                .clip(CircleShape)
+                .background(GlassInk.copy(alpha = 0.16f)),
+        )
+        Box(
+            Modifier.graphicsLayer {
+                scaleX = 1f - 0.14f * press
+                scaleY = 1f - 0.14f * press
+            },
+        ) {
+            CompositionLocalProvider(LocalContentColor provides GlassInk) { content() }
+        }
     }
 }
 

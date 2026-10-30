@@ -295,6 +295,31 @@ fun LibraryScreen(
             // The month in music takes the library's place while it is open,
             // and gives it back as it was: the scroll positions and choices
             // above are held outside this.
+            // FRAME MUSIC: Apple Music's library top, on the full library only.
+            val appleTop = filter == Filter.ALL && query.isBlank()
+            val artistUris = remember(artists) { artists.map { it.uri }.toSet() }
+            val likedSongs = state.playlists.firstOrNull { it.uri.endsWith(":collection") }
+            val shortcuts = listOfNotNull(
+                LibraryShortcut(LibraryGlyphs.playlists, stringResource(R.string.playlists)) { filter = Filter.PLAYLISTS },
+                LibraryShortcut(LibraryGlyphs.artists, stringResource(R.string.artists)) { filter = Filter.ARTISTS }
+                    .takeIf { artists.isNotEmpty() },
+                LibraryShortcut(LibraryGlyphs.albums, stringResource(R.string.albums)) { filter = Filter.ALBUMS }
+                    .takeIf { albums.isNotEmpty() },
+                likedSongs?.let { liked ->
+                    LibraryShortcut(LibraryGlyphs.songs, stringResource(R.string.liked_songs)) { onOpenPlaylist(liked) }
+                },
+                LibraryShortcut(LibraryGlyphs.podcasts, stringResource(R.string.podcasts)) { filter = Filter.PODCASTS }
+                    .takeIf { podcasts.isNotEmpty() },
+            )
+            val appleTopContent: @Composable () -> Unit = {
+                AppleLibraryTop(
+                    covers = playlists.filterNot { it.uri.endsWith(":collection") },
+                    isArtist = { it.uri in artistUris },
+                    onOpen = { open(it, artists, onOpenPlaylist, onOpenArtist) },
+                    shortcuts = shortcuts,
+                )
+            }
+
             AnimatedContent(
                 targetState = recapOpen && listeningEvents != null,
                 transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(160)) },
@@ -391,7 +416,9 @@ fun LibraryScreen(
                             }
                         }
 
-                        if (artists.isNotEmpty() && filter == Filter.ALL) {
+                        if (appleTop) {
+                            item(span = { GridItemSpan(maxLineSpan) }, key = "appleTop") { appleTopContent() }
+                        } else if (artists.isNotEmpty() && filter == Filter.ALL) {
                             item(span = { GridItemSpan(maxLineSpan) }, key = "artists") {
                                 ArtistShelf(artists, onOpenArtist)
                             }
@@ -452,7 +479,11 @@ fun LibraryScreen(
                             }
                         }
 
-                        if (artists.isNotEmpty() && filter == Filter.ALL) {
+                        if (appleTop) {
+                            item(key = "appleTop") {
+                                Box(Modifier.padding(horizontal = 20.dp)) { appleTopContent() }
+                            }
+                        } else if (artists.isNotEmpty() && filter == Filter.ALL) {
                             item(key = "artists") { ArtistShelf(artists, onOpenArtist) }
                         }
 

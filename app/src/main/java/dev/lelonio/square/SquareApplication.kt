@@ -32,6 +32,7 @@ class SquareApplication : Application(), ImageLoaderFactory {
 
     override fun onCreate() {
         super.onCreate()
+        dev.lelonio.square.backend.youtube.SoundCloud.init(this)
         // First, so a crash anywhere below is written down; see Report.
         dev.lelonio.square.diagnostics.Report.install(this)
         // Temporary, dev builds only; see WidevineProbe.

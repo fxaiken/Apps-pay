@@ -395,6 +395,8 @@ private class YouTubeStreamResolver(
 
     private fun resolveAnonymously(dataSpec: DataSpec): DataSpec {
         val uri = dataSpec.uri.toString()
+        // FRAME MUSIC: a SoundCloud song opens on its HLS playlist.
+        if (SoundCloud.owns(uri)) return dataSpec.withUri(android.net.Uri.parse(SoundCloud.streamUrl(uri)))
         if (!uri.startsWith(YouTubeBackend.TRACK_PREFIX) && !uri.startsWith(YouTubeBackend.VIDEO_PREFIX)) {
             return dataSpec
         }
@@ -516,13 +518,16 @@ private class YouTubeStreamResolver(
 @UnstableApi
 private class VideoAwareSourceFactory(
     private val base: DefaultMediaSourceFactory,
-    dataSources: androidx.media3.datasource.DataSource.Factory,
+    private val dataSources: androidx.media3.datasource.DataSource.Factory,
 ) : androidx.media3.exoplayer.source.MediaSource.Factory by base {
+
+    private val hls by lazy { androidx.media3.exoplayer.hls.HlsMediaSource.Factory(dataSources) }
 
     private val progressive = androidx.media3.exoplayer.source.ProgressiveMediaSource.Factory(dataSources)
 
     override fun createMediaSource(mediaItem: androidx.media3.common.MediaItem): androidx.media3.exoplayer.source.MediaSource {
         val uri = mediaItem.localConfiguration?.uri?.toString() ?: return base.createMediaSource(mediaItem)
+        if (SoundCloud.owns(uri)) return hls.createMediaSource(mediaItem)
         val ours = uri.startsWith(YouTubeBackend.TRACK_PREFIX) || uri.startsWith(YouTubeBackend.VIDEO_PREFIX)
         if (!ours || !YouTubeVideoMode.wantsVideo(uri)) return base.createMediaSource(mediaItem)
         fun half(part: String) = progressive.createMediaSource(

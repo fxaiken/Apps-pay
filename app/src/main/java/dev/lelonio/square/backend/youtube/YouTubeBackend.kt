@@ -119,9 +119,11 @@ class YouTubeBackend(private val account: YouTubeAccount) : MusicBackend {
                 val videos = async { searchItems(trimmed, YouTube.SearchFilter.FILTER_VIDEO) }
                 val podcasts = async { searchItems(trimmed, YouTube.SearchFilter.FILTER_PODCAST) }
                 val episodes = async { searchItems(trimmed, YouTube.SearchFilter.FILTER_EPISODE) }
+                // FRAME MUSIC: SoundCloud's tracks, after YouTube Music's songs.
+                val soundcloud = async { SoundCloud.search(trimmed).also(SoundCloud::remember) }
 
                 SearchResults(
-                    tracks = songs.await().filterIsInstance<SongItem>().map(::toCatalogTrack),
+                    tracks = songs.await().filterIsInstance<SongItem>().map(::toCatalogTrack) + soundcloud.await(),
                     albums = albums.await().filterIsInstance<AlbumItem>().map { album ->
                         SearchItem(
                             uri = "$PLAYLIST_PREFIX${album.playlistId}",
@@ -177,6 +179,11 @@ class YouTubeBackend(private val account: YouTubeAccount) : MusicBackend {
      * rather than the public catalogue.
      */
     override suspend fun playlists(): List<CatalogPlaylist> = withContext(Dispatchers.IO) {
+        // FRAME MUSIC: the songs kept from SoundCloud, first, signed in or not.
+        listOfNotNull(SoundCloud.libraryPlaylist()) + youtubePlaylists()
+    }
+
+    private suspend fun youtubePlaylists(): List<CatalogPlaylist> = withContext(Dispatchers.IO) {
         if (!account.isSignedIn) return@withContext emptyList()
 
         YouTube.library(LIKED_PLAYLISTS_BROWSE_ID)
@@ -519,6 +526,10 @@ class YouTubeBackend(private val account: YouTubeAccount) : MusicBackend {
         when {
             uri.startsWith(TRACK_PREFIX) || uri.startsWith(VIDEO_PREFIX) -> emptyList()
 
+            // FRAME MUSIC: SoundCloud, kept on the phone.
+            SoundCloud.owns(uri) -> emptyList()
+            id == SoundCloud.LIBRARY_ID -> SoundCloud.saved()
+
             // A song's radio, reopened: asked again, as there is no list to browse.
             isStation(uri) -> radio("$TRACK_PREFIX${id.removePrefix(RADIO_LIST)}")
 
@@ -740,7 +751,8 @@ class YouTubeBackend(private val account: YouTubeAccount) : MusicBackend {
     private val editable = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 
     override fun canWriteTo(playlistUri: String): Boolean =
-        account.isSignedIn && playlistUri.removePrefix(PLAYLIST_PREFIX) in editable
+        playlistUri == SoundCloud.LIBRARY_URI ||
+            (account.isSignedIn && playlistUri.removePrefix(PLAYLIST_PREFIX) in editable)
 
     /** Playlist entry ids, by "playlist/video"; see [removeFromPlaylist]. */
     private val entries = java.util.concurrent.ConcurrentHashMap<String, String>()
@@ -802,8 +814,9 @@ class YouTubeBackend(private val account: YouTubeAccount) : MusicBackend {
         return found
     }
 
+    // FRAME MUSIC: true without an account too, for the SoundCloud list.
     override val canEditPlaylists: Boolean
-        get() = account.isSignedIn
+        get() = true
 
     override suspend fun createPlaylist(name: String, description: String, public: Boolean): CatalogPlaylist =
         withContext(Dispatchers.IO) {
@@ -834,6 +847,11 @@ class YouTubeBackend(private val account: YouTubeAccount) : MusicBackend {
      * is the like button, see [addToPlaylist].
      */
     override suspend fun writablePlaylists(): List<CatalogPlaylist> = withContext(Dispatchers.IO) {
+        // FRAME MUSIC: there is always the SoundCloud list to add to.
+        youtubeWritablePlaylists() + SoundCloud.pickerPlaylist()
+    }
+
+    private suspend fun youtubeWritablePlaylists(): List<CatalogPlaylist> = withContext(Dispatchers.IO) {
         if (!account.isSignedIn) return@withContext emptyList()
         YouTube.library(LIKED_PLAYLISTS_BROWSE_ID)
             .getOrThrow()
@@ -852,6 +870,14 @@ class YouTubeBackend(private val account: YouTubeAccount) : MusicBackend {
     }
 
     override suspend fun addToPlaylist(playlistUri: String, trackUri: String) {
+        // FRAME MUSIC: a SoundCloud song goes to the SoundCloud list, whichever
+        // list it was added to or liked into; YouTube cannot hold it.
+        if (SoundCloud.owns(trackUri)) {
+            val track = SoundCloud.known(trackUri) ?: error("unknown SoundCloud track")
+            SoundCloud.save(track)
+            return
+        }
+        if (playlistUri == SoundCloud.LIBRARY_URI) error("Only SoundCloud songs go in this list")
         withContext(Dispatchers.IO) {
             val playlistId = playlistUri.removePrefix(PLAYLIST_PREFIX)
             val videoId = videoIdOfUri(trackUri)
@@ -864,6 +890,10 @@ class YouTubeBackend(private val account: YouTubeAccount) : MusicBackend {
     }
 
     override suspend fun removeFromPlaylist(playlistUri: String, trackUri: String) {
+        if (SoundCloud.owns(trackUri)) {
+            SoundCloud.remove(trackUri)
+            return
+        }
         withContext(Dispatchers.IO) {
             val playlistId = playlistUri.removePrefix(PLAYLIST_PREFIX)
             val videoId = videoIdOfUri(trackUri)

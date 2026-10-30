@@ -1,0 +1,101 @@
+name: FRAME MUSIC
+
+# Every push to the frame-music branch builds the release APK, signs it with the
+# FRAME MUSIC key (kept in the Actions cache, never in the repository) and
+# publishes it as a pre-release. A failed build publishes its errors instead.
+on:
+  push:
+    branches: [frame-music]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: frame-music-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup
+
+      - name: Restore FRAME MUSIC signing key
+        id: signing-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.framemusic-signing
+          key: framemusic-signing-v1
+
+      - name: Signing key
+        run: |
+          mkdir -p ~/.framemusic-signing
+          KS=~/.framemusic-signing/framemusic.keystore
+          if [ ! -f "$KS" ]; then
+            keytool -genkeypair -keystore "$KS" -storetype PKCS12 -storepass framemusic -alias framemusic \
+              -keypass framemusic -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=FRAME MUSIC,O=FRAME,C=PT"
+          fi
+          {
+            echo "storeFile=$KS"
+            echo "storePassword=framemusic"
+            echo "keyAlias=framemusic"
+            echo "keyPassword=framemusic"
+          } > keystore.properties
+
+      - name: Build
+        run: |
+          set -o pipefail
+          ./gradlew :app:assembleRelease --stacktrace 2>&1 | tee build.log
+
+      - name: Check the signature
+        id: sign
+        run: |
+          apk=app/build/outputs/apk/release/app-universal-release.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$apk" | tee certs.txt
+          echo "fingerprint=$(grep -m1 'SHA-256' certs.txt | awk '{print $NF}')" >> "$GITHUB_OUTPUT"
+          cp "$apk" frame-music.apk
+          cp app/build/outputs/apk/release/app-arm64-v8a-release.apk frame-music-arm64.apk
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: frame-music-v${{ github.run_number }}
+          name: FRAME MUSIC (build ${{ github.run_number }})
+          target_commitish: ${{ github.sha }}
+          prerelease: true
+          make_latest: false
+          files: |
+            frame-music.apk
+            frame-music-arm64.apk
+          body: |
+            Assinatura (SHA-256): ${{ steps.sign.outputs.fingerprint }} · chave reutilizada: ${{ steps.signing-cache.outputs.cache-hit == 'true' && 'sim' || 'não (nova)' }}
+
+            FRAME MUSIC para Android: Spotify Premium e YouTube Music numa só app, com o design do Apple Music.
+            Baseado no Square de Lelonio (GPL-3.0); o código-fonte está neste repositório.
+
+      - name: Collect build errors
+        if: failure()
+        shell: bash
+        run: |
+          {
+            echo "A compilação falhou no commit ${GITHUB_SHA}."
+            echo
+            echo '```'
+            grep -E "^e: |error:|error\[|What went wrong|Could not resolve|> " build.log | head -120 || true
+            echo '```'
+          } > build-errors.md
+
+      - name: Publish build errors
+        if: failure()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: frame-music-build-failed-${{ github.run_number }}
+          name: FRAME MUSIC — erro de compilação (build ${{ github.run_number }})
+          target_commitish: ${{ github.sha }}
+          prerelease: true
+          make_latest: false
+          body_path: build-errors.md

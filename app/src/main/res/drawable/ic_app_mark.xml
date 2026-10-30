@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?><!-- FRAME MUSIC mark: two beamed notes. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="256"
+    android:viewportHeight="256">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M92,64L220,32L220,64L92,96Z M92,80h18v110h-18Z M202,40h18v128h-18Z M42,196a34,28 -20,1 0,68 -6a34,28 -20,1 0,-68 6Z M154,174a34,28 -20,1 0,68 -6a34,28 -20,1 0,-68 6Z" />
+</vector>

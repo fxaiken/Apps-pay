@@ -1,0 +1,194 @@
+package dev.lelonio.square.ui.components
+
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.material3.Icon
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import dev.lelonio.square.R
+import dev.lelonio.square.ui.theme.Ink
+
+/**
+ * The name: the FRAME wordmark in its own colours, with MUSIC set beside it in
+ * the theme's ink so it reads on light and dark alike.
+ *
+ * Sized by its height, like the drawn wordmark it replaces, so callers give it a
+ * height and let it measure itself.
+ */
+@Composable
+fun SquareWordmark(
+    height: Dp,
+    modifier: Modifier = Modifier,
+    color: Color = Ink,
+) {
+    val musicSize = with(androidx.compose.ui.platform.LocalDensity.current) { (height * 0.56f).toSp() }
+    Row(modifier.height(height), verticalAlignment = Alignment.CenterVertically) {
+        androidx.compose.foundation.Image(
+            painter = painterResource(R.drawable.frame_wordmark),
+            contentDescription = "FRAME MUSIC",
+            modifier = Modifier.height(height),
+        )
+        Spacer(Modifier.width(height * 0.28f))
+        androidx.compose.material3.Text(
+            text = "MUSIC",
+            color = color,
+            fontSize = musicSize,
+            letterSpacing = musicSize * 0.18f,
+            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+            maxLines = 1,
+        )
+    }
+}
+
+/**
+ * The launcher art beside the name.
+ *
+ * The real icon rather than a drawing of one: this is what the user tapped to
+ * get here, and showing the same thing is what says the two are one app.
+ */
+@Composable
+fun AppLockup(
+    modifier: Modifier = Modifier,
+    iconSize: Dp = 28.dp,
+    nameHeight: Dp = 14.dp,
+    /**
+     * What to put the mark on, when it should sit on glass.
+     *
+     * Null leaves it bare, which is what everywhere but the home header wants:
+     * a plate is a control, and a mark in the middle of a login page is not one.
+     */
+    plate: dev.lelonio.square.ui.glass.backdrop.Backdrop? = null,
+) {
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        if (plate == null) {
+            AppGlyph(iconSize)
+        } else {
+            AppPlate(iconSize, plate)
+        }
+        Spacer(Modifier.width(iconSize * 0.32f))
+        SquareWordmark(nameHeight)
+    }
+}
+
+/**
+ * The mark on a round pane of the app's own glass.
+ *
+ * The same material and the same rim as the round buttons — see CircleAction —
+ * so it belongs to the same row of controls even though there is nothing to
+ * press. What it gives the mark is a place to stand.
+ *
+ * With something behind it to bend. Glass over the page's own flat colour has
+ * nothing to refract and comes out as a grey disc, so the pane is given a wash
+ * of the accent the app takes from the artwork that is playing: off-centre, so
+ * the film and the rim have a gradient to sit on, and alive, because that
+ * colour slides to a new one every time the music changes.
+ *
+ * Flat, deliberately. This sits in a header that moves with the scroll, and a
+ * pane that samples the screen re-photographs it every frame — for a
+ * reflection of a colour this already knows.
+ */
+@Composable
+fun AppPlate(
+    size: Dp,
+    backdrop: dev.lelonio.square.ui.glass.backdrop.Backdrop,
+    modifier: Modifier = Modifier,
+) {
+    val accent = androidx.compose.material3.MaterialTheme.colorScheme.primary
+    dev.lelonio.square.ui.glass.LiquidButton(
+        onClick = {},
+        backdrop = backdrop,
+        isInteractive = false,
+        flat = true,
+        modifier = modifier
+            .size(size)
+            // Brightest at the top left and gone by the bottom right, which is
+            // the one thing an even ring cannot do: a flat rim reads as a
+            // sticker, a graded one as an edge catching light.
+            .border(
+                0.8.dp,
+                androidx.compose.ui.graphics.Brush.linearGradient(
+                    0f to Color.White.copy(alpha = 0.62f),
+                    0.5f to Color.White.copy(alpha = 0.20f),
+                    1f to Color.White.copy(alpha = 0.06f),
+                ),
+                androidx.compose.foundation.shape.CircleShape,
+            ),
+        contentHeight = size,
+        contentPadding = 0.dp,
+    ) {
+        Box(Modifier.size(size), contentAlignment = Alignment.Center) {
+            // Over the glass rather than under it.
+            //
+            // The material draws a film across whatever it is given, and a wash
+            // painted underneath came out through it as flat grey — the thing
+            // this exists to avoid. Above the film it is what the pane is
+            // holding: the accent the app takes from the artwork playing, which
+            // slides to a new colour every time the music changes.
+            androidx.compose.foundation.Canvas(Modifier.matchParentSize()) {
+                drawRect(
+                    androidx.compose.ui.graphics.Brush.linearGradient(
+                        0f to accent.copy(alpha = 0.62f),
+                        0.5f to accent.copy(alpha = 0.30f),
+                        1f to accent.copy(alpha = 0.08f),
+                        start = androidx.compose.ui.geometry.Offset.Zero,
+                        end = androidx.compose.ui.geometry.Offset(size.toPx(), size.toPx()),
+                    ),
+                )
+                // The light on it, which is what makes it read as curved rather
+                // than as a coloured circle.
+                drawCircle(
+                    androidx.compose.ui.graphics.Brush.radialGradient(
+                        listOf(Color.White.copy(alpha = 0.34f), Color.Transparent),
+                        center = androidx.compose.ui.geometry.Offset(
+                            this.size.width * 0.30f,
+                            this.size.height * 0.20f,
+                        ),
+                        radius = this.size.width * 0.62f,
+                    ),
+                )
+            }
+            AppGlyph(size * 0.58f)
+        }
+    }
+}
+
+/**
+ * The app's mark with no plate under it.
+ *
+ * The launcher icon is a tile: artwork on a coloured square, because that is
+ * what a launcher draws. On a page of the app itself there is nothing for a
+ * tile to sit on — it reads as a sticker of the icon rather than as the app's
+ * own mark — so what is used is the wave alone, in the page's ink.
+ *
+ * Drawn from the same file the launcher art came from — see
+ * `app/icon-src/wave-square.svg` — rather than from the stroked approximation
+ * the themed launcher icon carries, which was a redrawing of it by hand and
+ * showed at this size.
+ */
+@Composable
+fun AppGlyph(size: Dp, modifier: Modifier = Modifier, tint: Color = Ink) {
+    Icon(
+        painter = painterResource(R.drawable.ic_app_mark),
+        contentDescription = null,
+        tint = tint,
+        modifier = modifier.size(size),
+    )
+}
+
+/** S Q U A R E, as polylines on the grid described in [SquareWordmark]. */

@@ -25,8 +25,17 @@ import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -79,8 +88,22 @@ fun <T> NuvioShelfSection(
     ScreenActivityEffect(state) { active ->
         if (!active) state.stopScroll()
     }
+    // Apple TV: a row fades and rises into place the first time it appears, not on every scroll back.
+    var revealed by rememberSaveable { mutableStateOf(!useAppleTvDesign) }
+    val entrance = remember { Animatable(if (revealed) 1f else 0f) }
+    LaunchedEffect(Unit) {
+        if (!revealed) {
+            entrance.animateTo(1f, tween(durationMillis = 420, easing = FastOutSlowInEasing))
+            revealed = true
+        }
+    }
     Column(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                alpha = entrance.value
+                translationY = (1f - entrance.value) * 18.dp.toPx()
+            },
         verticalArrangement = Arrangement.spacedBy(tokens.spacing.controlGap + NuvioTokens.Space.s2),
     ) {
         if (title.isNotBlank()) {

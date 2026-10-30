@@ -70,6 +70,9 @@ import com.nuvio.app.core.ui.centeredVerticalBarPadding
 import com.nuvio.app.core.ui.withVerticalBar
 import com.nuvio.app.core.ui.useAppleTvDesign
 import com.nuvio.app.core.ui.liquidGlass
+import com.nuvio.app.core.ui.pressScale
+import com.nuvio.app.core.ui.rememberPressProgress
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.home.stableKey
 import kotlinx.coroutines.CoroutineScope
@@ -89,6 +92,7 @@ private const val HERO_SCROLL_MAX_SCALE = 1.3f
 private const val HERO_SWIPE_THRESHOLD_FRACTION = 0.16f
 private const val HERO_SWIPE_VELOCITY_THRESHOLD = 300f
 private const val HERO_AUTO_SCROLL_INTERVAL_MS = 8_000L
+private const val HERO_CONTENT_RISE_DP = 22f
 private const val MOBILE_HERO_VIEWPORT_RATIO = 0.82f
 private const val MOBILE_HERO_MIN_HEIGHT_DP = 360f
 private const val MOBILE_HERO_MAX_HEIGHT_DP = 760f
@@ -308,6 +312,10 @@ fun HomeHeroSection(
                                     modifier = Modifier.graphicsLayer {
                                         alpha = layer.visibility
                                         translationX = -layer.offset * heroWidthPx * HERO_CONTENT_PARALLAX
+                                        // Apple TV: the incoming title settles upward as its page takes over.
+                                        if (useAppleTvDesign) {
+                                            translationY = (1f - layer.visibility) * HERO_CONTENT_RISE_DP * density
+                                        }
                                     },
                                 ) {
                                     HeroContentBlock(
@@ -407,10 +415,13 @@ private fun AppleTvHeroPlayButton(
     enabled: Boolean,
     onClick: () -> Unit,
 ) {
+    val interaction = remember { MutableInteractionSource() }
+    val press by rememberPressProgress(interaction)
     Surface(
         modifier = Modifier
+            .pressScale({ press }, pressedScale = 0.96f)
             .clip(RoundedCornerShape(12.dp))
-            .clickable(enabled = enabled, onClick = onClick),
+            .clickable(interactionSource = interaction, indication = null, enabled = enabled, onClick = onClick),
         color = Color.White,
         contentColor = Color.Black,
         shape = RoundedCornerShape(12.dp),

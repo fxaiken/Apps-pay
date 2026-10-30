@@ -46,6 +46,10 @@ import androidx.compose.ui.unit.dp
 import com.nuvio.app.core.ui.AppIconResource
 import com.nuvio.app.core.ui.appIconPainter
 import com.nuvio.app.core.ui.liquidGlass
+import com.nuvio.app.core.ui.pressScale
+import com.nuvio.app.core.ui.rememberPressProgress
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import com.nuvio.app.core.ui.useAppleTvDesign
 import androidx.compose.ui.graphics.Color
 import nuvio.composeapp.generated.resources.Res
@@ -87,6 +91,10 @@ fun DetailActionButtons(
     val playShape = RoundedCornerShape(if (useAppleTvDesign) 14.dp else 40.dp)
     // Apple TV look: white primary button; anything unavailable or secondary is glass.
     val glassPlay = useAppleTvDesign && !playEnabled
+    val playInteraction = remember { MutableInteractionSource() }
+    val playPress by rememberPressProgress(playInteraction)
+    val moreInteraction = remember { MutableInteractionSource() }
+    val morePress by rememberPressProgress(moreInteraction)
     val hapticFeedback = LocalHapticFeedback.current
     var actionsExpanded by remember { mutableStateOf(false) }
     val menuProgress by animateFloatAsState(
@@ -113,7 +121,8 @@ fun DetailActionButtons(
                 modifier = Modifier
                     .weight(1f)
                     .height(buttonHeight)
-                    .then(if (glassPlay) Modifier.liquidGlass(playShape) else Modifier),
+                    .then(if (useAppleTvDesign) Modifier.pressScale({ playPress }, pressedScale = 0.97f) else Modifier)
+                    .then(if (glassPlay) Modifier.liquidGlass(playShape, highlight = playPress) else Modifier),
                 shape = playShape,
                 color = when {
                     glassPlay -> Color.Transparent
@@ -130,6 +139,8 @@ fun DetailActionButtons(
                     modifier = Modifier
                         .fillMaxWidth()
                         .combinedClickable(
+                            interactionSource = playInteraction,
+                            indication = if (useAppleTvDesign) null else LocalIndication.current,
                             enabled = playEnabled,
                             onClick = {
                                 onPlayClick()
@@ -219,7 +230,8 @@ fun DetailActionButtons(
                 Surface(
                     modifier = Modifier
                         .size(iconButtonSize)
-                        .then(if (useAppleTvDesign && !actionsExpanded) Modifier.liquidGlass(CircleShape) else Modifier),
+                        .then(if (useAppleTvDesign) Modifier.pressScale({ morePress }) else Modifier)
+                        .then(if (useAppleTvDesign && !actionsExpanded) Modifier.liquidGlass(CircleShape, highlight = morePress) else Modifier),
                     shape = CircleShape,
                     color = when {
                         actionsExpanded -> MaterialTheme.colorScheme.onBackground
@@ -235,7 +247,11 @@ fun DetailActionButtons(
                     Box(
                         modifier = Modifier
                             .size(iconButtonSize)
-                            .clickable(role = Role.Button) {
+                            .clickable(
+                                interactionSource = moreInteraction,
+                                indication = if (useAppleTvDesign) null else LocalIndication.current,
+                                role = Role.Button,
+                            ) {
                                 hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 actionsExpanded = !actionsExpanded
                             },
@@ -323,14 +339,17 @@ private fun DetailIconAction(
     onLongClick: (() -> Unit)? = null,
 ) {
     val glass = useAppleTvDesign && !active
+    val interaction = remember { MutableInteractionSource() }
+    val press by rememberPressProgress(interaction)
     Surface(
         modifier = modifier
             .graphicsLayer {
                 alpha = progress
-                scaleX = 0.86f + (0.14f * progress)
-                scaleY = 0.86f + (0.14f * progress)
+                val pressed = if (useAppleTvDesign) 0.06f * press else 0f
+                scaleX = 0.86f + (0.14f * progress) - pressed
+                scaleY = 0.86f + (0.14f * progress) - pressed
             }
-            .then(if (glass) Modifier.liquidGlass(CircleShape) else Modifier),
+            .then(if (glass) Modifier.liquidGlass(CircleShape, highlight = press) else Modifier),
         shape = CircleShape,
         color = when {
             active -> MaterialTheme.colorScheme.onBackground
@@ -348,6 +367,8 @@ private fun DetailIconAction(
             modifier = Modifier
                 .size(size)
                 .combinedClickable(
+                    interactionSource = interaction,
+                    indication = if (useAppleTvDesign) null else LocalIndication.current,
                     onClick = onClick,
                     onLongClick = onLongClick,
                     role = Role.Button,

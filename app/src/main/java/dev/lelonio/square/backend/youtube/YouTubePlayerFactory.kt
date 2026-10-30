@@ -372,6 +372,29 @@ private class YouTubeStreamResolver(
      * only play the song to one; see SignedInStreams.
      */
     override fun resolveDataSpec(dataSpec: DataSpec): DataSpec = try {
+        resolveOwn(dataSpec)
+    } catch (error: Exception) {
+        // FRAME MUSIC: the same song from another upload, before giving up.
+        resolveAlternative(dataSpec) ?: throw error
+    }
+
+    private fun resolveAlternative(dataSpec: DataSpec): DataSpec? {
+        val uri = dataSpec.uri.toString()
+        if (!uri.startsWith(YouTubeBackend.TRACK_PREFIX) || dataSpec.uri.fragment != null) return null
+        val id = YouTubeBackend.videoIdOfUri(uri)
+        for (other in YouTubeFallback.alternatives(id)) {
+            val resolved = runCatching {
+                resolveAnonymously(dataSpec.withUri(android.net.Uri.parse("${YouTubeBackend.TRACK_PREFIX}$other")))
+            }.getOrNull()
+            if (resolved != null) {
+                android.util.Log.i("FrameFallback", "$id plays as $other")
+                return resolved
+            }
+        }
+        return null
+    }
+
+    private fun resolveOwn(dataSpec: DataSpec): DataSpec = try {
         resolveAnonymously(dataSpec)
     } catch (error: Exception) {
         if (!SignedInStreams.needsAccount(error)) throw error

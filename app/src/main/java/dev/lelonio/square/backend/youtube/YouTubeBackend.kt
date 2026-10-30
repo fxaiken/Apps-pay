@@ -548,6 +548,7 @@ class YouTubeBackend(private val account: YouTubeAccount) : MusicBackend {
                 uri = artist.id?.takeIf { it.isNotBlank() }?.let { "$ARTIST_PREFIX$it" },
             )
         }
+        YouTubeFallback.remember(item.id, item.title, named.joinToString(" ") { it.name.trim() })
         return CatalogTrack(
             uri = "$TRACK_PREFIX${item.id}",
             name = item.title,

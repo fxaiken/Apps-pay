@@ -70,6 +70,11 @@ import com.nuvio.app.core.ui.centeredVerticalBarPadding
 import com.nuvio.app.core.ui.withVerticalBar
 import com.nuvio.app.core.ui.useAppleTvDesign
 import com.nuvio.app.core.ui.liquidGlass
+import com.nuvio.app.core.ui.GlassCapsule
+import com.nuvio.app.core.ui.glassOver
+import com.kyant.backdrop.Backdrop
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.outlined.Info
@@ -186,6 +191,7 @@ fun HomeHeroSection(
             mobileBelowSectionHeightHintDp = mobileBelowSectionHeightHint?.value,
         )
         val heroWidthPx = with(LocalDensity.current) { maxWidth.toPx() }
+        val heroBackdrop = rememberLayerBackdrop()
         val heroHeightPx = with(LocalDensity.current) { layout.heroHeight.toPx() }
         val scrollOffsetPx by remember(listState, heroHeightPx) {
             derivedStateOf {
@@ -260,7 +266,9 @@ fun HomeHeroSection(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(layout.heroHeight)
-                        .heroStretchZoom(stretchPx),
+                        .heroStretchZoom(stretchPx)
+                        // The artwork is what the hero's glass buttons refract.
+                        .then(if (useAppleTvDesign) Modifier.layerBackdrop(heroBackdrop) else Modifier),
                 ) {
                     visiblePages.forEach { layer ->
                         AsyncImage(
@@ -370,6 +378,7 @@ fun HomeHeroSection(
                             )
                             if (onItemLongClick != null) {
                                 AppleTvHeroAddButton(
+                                    backdrop = heroBackdrop,
                                     saved = libraryState.let { LibraryRepository.isSaved(currentItem.id, currentItem.type) },
                                     onClick = { onItemLongClick(currentItem) },
                                 )
@@ -489,6 +498,7 @@ private fun AppleTvHeroPlayButton(
 /** Glass "+" beside the main button; shows a check once the title is in the library. */
 @Composable
 private fun AppleTvHeroAddButton(
+    backdrop: Backdrop,
     saved: Boolean,
     onClick: () -> Unit,
 ) {
@@ -498,7 +508,7 @@ private fun AppleTvHeroAddButton(
         modifier = Modifier
             .size(48.dp)
             .pressScale({ press })
-            .liquidGlass(CircleShape, fillAlpha = 0.18f, highlight = press)
+            .glassOver(backdrop, GlassCapsule, highlight = press)
             .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {

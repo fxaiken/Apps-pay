@@ -277,6 +277,14 @@ fun YouTubeLoginScreen(account: YouTubeAccount, onDone: () -> Unit) {
                                 request: android.webkit.WebResourceRequest,
                             ): Boolean {
                                 val scheme = request.url.scheme?.lowercase()
+                                // FRAME MUSIC: Google sometimes sends a phone that
+                                // has just signed in on to the YouTube Music app's
+                                // Play Store page instead of back to the site.
+                                // Asked again as a computer, the site stays.
+                                if (request.url.host?.contains("play.google.com") == true) {
+                                    backToMusicAsDesktop(view)
+                                    return true
+                                }
                                 if (scheme == "http" || scheme == "https") return false
                                 android.util.Log.i(TAG, "not following a $scheme link")
                                 finishIfSignedIn(view, view.url)
@@ -284,7 +292,25 @@ fun YouTubeLoginScreen(account: YouTubeAccount, onDone: () -> Unit) {
                             }
 
                             override fun onPageFinished(view: WebView, url: String?) {
+                                if (url?.contains("play.google.com") == true) {
+                                    backToMusicAsDesktop(view)
+                                    return
+                                }
                                 finishIfSignedIn(view, url)
+                            }
+
+                            private var bounces = 0
+
+                            private fun backToMusicAsDesktop(view: WebView) {
+                                view.stopLoading()
+                                // Never a loop: if the site will not stay, the
+                                // cookie already there is taken as the sign-in.
+                                if (++bounces > 2) {
+                                    finishIfSignedIn(view, MUSIC_URL)
+                                    return
+                                }
+                                view.settings.userAgentString = DESKTOP_USER_AGENT
+                                view.loadUrl(MUSIC_URL)
                             }
 
                             private fun finishIfSignedIn(view: WebView, url: String?) {
@@ -390,5 +416,7 @@ fun YouTubeLoginScreen(account: YouTubeAccount, onDone: () -> Unit) {
 
 private const val TAG = "SquareYouTubeLogin"
 private const val MUSIC_URL = "https://music.youtube.com"
+private const val DESKTOP_USER_AGENT =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
 private const val SIGN_IN_URL =
     "https://accounts.google.com/ServiceLogin?continue=https%3A%2F%2Fmusic.youtube.com"

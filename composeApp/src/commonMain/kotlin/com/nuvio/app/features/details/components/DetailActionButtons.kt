@@ -45,6 +45,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.nuvio.app.core.ui.AppIconResource
 import com.nuvio.app.core.ui.appIconPainter
+import com.nuvio.app.core.ui.liquidGlass
+import com.nuvio.app.core.ui.useAppleTvDesign
+import androidx.compose.ui.graphics.Color
 import nuvio.composeapp.generated.resources.Res
 import nuvio.composeapp.generated.resources.action_play
 import nuvio.composeapp.generated.resources.details_actions_menu_label
@@ -81,7 +84,9 @@ fun DetailActionButtons(
     val playPainter = appIconPainter(AppIconResource.PlayerPlay)
     val buttonHeight = if (isTablet) 56.dp else 52.dp
     val iconButtonSize = buttonHeight
-    val playShape = RoundedCornerShape(40.dp)
+    val playShape = RoundedCornerShape(if (useAppleTvDesign) 14.dp else 40.dp)
+    // Apple TV look: white primary button; anything unavailable or secondary is glass.
+    val glassPlay = useAppleTvDesign && !playEnabled
     val hapticFeedback = LocalHapticFeedback.current
     var actionsExpanded by remember { mutableStateOf(false) }
     val menuProgress by animateFloatAsState(
@@ -107,10 +112,19 @@ fun DetailActionButtons(
             Surface(
                 modifier = Modifier
                     .weight(1f)
-                    .height(buttonHeight),
+                    .height(buttonHeight)
+                    .then(if (glassPlay) Modifier.liquidGlass(playShape) else Modifier),
                 shape = playShape,
-                color = if (playEnabled) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.surfaceVariant,
-                contentColor = if (playEnabled) MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+                color = when {
+                    glassPlay -> Color.Transparent
+                    playEnabled -> MaterialTheme.colorScheme.onBackground
+                    else -> MaterialTheme.colorScheme.surfaceVariant
+                },
+                contentColor = when {
+                    glassPlay -> Color.White.copy(alpha = 0.6f)
+                    playEnabled -> MaterialTheme.colorScheme.background
+                    else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                },
             ) {
                 Row(
                     modifier = Modifier
@@ -203,12 +217,14 @@ fun DetailActionButtons(
 
             if (hasSecondaryActions) {
                 Surface(
-                    modifier = Modifier.size(iconButtonSize),
+                    modifier = Modifier
+                        .size(iconButtonSize)
+                        .then(if (useAppleTvDesign && !actionsExpanded) Modifier.liquidGlass(CircleShape) else Modifier),
                     shape = CircleShape,
-                    color = if (actionsExpanded) {
-                        MaterialTheme.colorScheme.onBackground
-                    } else {
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.82f)
+                    color = when {
+                        actionsExpanded -> MaterialTheme.colorScheme.onBackground
+                        useAppleTvDesign -> Color.Transparent
+                        else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.82f)
                     },
                     contentColor = if (actionsExpanded) {
                         MaterialTheme.colorScheme.background
@@ -306,24 +322,27 @@ private fun DetailIconAction(
     size: Dp,
     onLongClick: (() -> Unit)? = null,
 ) {
+    val glass = useAppleTvDesign && !active
     Surface(
-        modifier = modifier.graphicsLayer {
-            alpha = progress
-            scaleX = 0.86f + (0.14f * progress)
-            scaleY = 0.86f + (0.14f * progress)
-        },
+        modifier = modifier
+            .graphicsLayer {
+                alpha = progress
+                scaleX = 0.86f + (0.14f * progress)
+                scaleY = 0.86f + (0.14f * progress)
+            }
+            .then(if (glass) Modifier.liquidGlass(CircleShape) else Modifier),
         shape = CircleShape,
-        color = if (active) {
-            MaterialTheme.colorScheme.onBackground
-        } else {
-            MaterialTheme.colorScheme.surfaceVariant
+        color = when {
+            active -> MaterialTheme.colorScheme.onBackground
+            glass -> Color.Transparent
+            else -> MaterialTheme.colorScheme.surfaceVariant
         },
         contentColor = if (active) {
             MaterialTheme.colorScheme.background
         } else {
             MaterialTheme.colorScheme.onSurface
         },
-        tonalElevation = 6.dp,
+        tonalElevation = if (glass) 0.dp else 6.dp,
     ) {
         Box(
             modifier = Modifier

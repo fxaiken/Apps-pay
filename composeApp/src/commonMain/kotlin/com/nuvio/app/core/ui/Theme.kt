@@ -202,7 +202,18 @@ fun NuvioTheme(
     content: @Composable () -> Unit,
 ) {
     val palette = remember(appTheme, customThemeColors) {
-        ThemeColors.getColorPalette(appTheme, customThemeColors)
+        ThemeColors.getColorPalette(appTheme, customThemeColors).let { base ->
+            // Apple TV look: true black canvas with the system's grouped grays for raised surfaces.
+            if (useAppleTvDesign) {
+                base.copy(
+                    background = Color.Black,
+                    backgroundElevated = Color(0xFF1C1C1E),
+                    backgroundCard = Color(0xFF2C2C2E),
+                )
+            } else {
+                base
+            }
+        }
     }
     val colorScheme = buildColorScheme(palette, amoled = amoled)
     val tokens = defaultNuvioThemeTokens(palette, amoled = amoled, colorScheme = colorScheme)

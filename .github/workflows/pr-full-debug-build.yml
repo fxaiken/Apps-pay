@@ -50,13 +50,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.android/debug.keystore
-          key: nuvio-appletv-signing-key-v1
+          key: frame-signing-key-v1
 
       - name: Ensure signing key
         run: |
           mkdir -p ~/.android
           [ -f ~/.android/debug.keystore ] || keytool -genkeypair -keystore ~/.android/debug.keystore -storepass android \
-            -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Nuvio,O=Nuvio,C=PT"
+            -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=FRAME,O=FRAME,C=PT"
 
       - name: Build fullDebug APK
         run: ./gradlew :androidApp:assembleFullDebug -Pnuvio.android.distribution=full -Pnuvio.ios.distribution=appstore --stacktrace
@@ -71,18 +71,19 @@ jobs:
 
       - name: Rename APK for release
         if: github.event_name == 'push'
-        run: cp androidApp/build/outputs/apk/full/debug/androidApp-full-debug.apk nuvio-appletv.apk
+        run: cp androidApp/build/outputs/apk/full/debug/androidApp-full-debug.apk frame.apk
 
       - name: Publish release
         if: github.event_name == 'push'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: nuvio-appletv-v${{ github.run_number }}
-          name: Nuvio estilo Apple TV (build ${{ github.run_number }})
+          tag_name: frame-v${{ github.run_number }}
+          name: FRAME (build ${{ github.run_number }})
           target_commitish: ${{ github.sha }}
           prerelease: true
           make_latest: false
-          files: nuvio-appletv.apk
+          files: frame.apk
           body: |
-            Nuvio para Android com o ecrã inicial ao estilo Apple TV.
-            Se tiver o Nuvio da Play Store instalado, desinstale-o primeiro (as assinaturas são diferentes).
+            FRAME para Android: design ao estilo Apple TV com botões de vidro.
+            Baseado no Nuvio Mobile (GPL-3.0); o código-fonte está neste repositório.
+            É uma app nova: pode ficar instalada ao lado do Nuvio.

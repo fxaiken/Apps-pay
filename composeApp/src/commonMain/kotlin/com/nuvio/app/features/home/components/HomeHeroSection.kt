@@ -69,6 +69,7 @@ import com.nuvio.app.core.ui.heroStretchZoom
 import com.nuvio.app.core.ui.centeredVerticalBarPadding
 import com.nuvio.app.core.ui.withVerticalBar
 import com.nuvio.app.core.ui.useAppleTvDesign
+import com.nuvio.app.core.ui.liquidGlass
 import com.nuvio.app.features.home.MetaPreview
 import com.nuvio.app.features.home.stableKey
 import kotlinx.coroutines.CoroutineScope
@@ -439,20 +440,24 @@ private fun AppleTvHeroPageIndicator(
     activeFraction: (Int) -> Float,
     onSelect: (Int) -> Unit,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(7.dp, Alignment.CenterHorizontally),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        repeat(itemCount) { index ->
-            val fraction = activeFraction(index)
-            Box(
-                modifier = Modifier
-                    .size(7.dp)
-                    .clip(CircleShape)
-                    .clickable { onSelect(index) }
-                    .background(Color.White.copy(alpha = 0.32f + 0.68f * fraction)),
-            )
+    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        Row(
+            modifier = Modifier
+                .liquidGlass(RoundedCornerShape(50))
+                .padding(horizontal = 10.dp, vertical = 7.dp),
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            repeat(itemCount) { index ->
+                val fraction = activeFraction(index)
+                Box(
+                    modifier = Modifier
+                        .size(7.dp)
+                        .clip(CircleShape)
+                        .clickable { onSelect(index) }
+                        .background(Color.White.copy(alpha = 0.32f + 0.68f * fraction)),
+                )
+            }
         }
     }
 }

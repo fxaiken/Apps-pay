@@ -310,7 +310,7 @@ fun NuvioPrimaryButton(
             .fillMaxWidth()
             .height(NuvioTokens.Space.s48 + NuvioTokens.Space.s4),
         enabled = enabled,
-        shape = tokens.shapes.button,
+        shape = if (useAppleTvDesign) RoundedCornerShape(14.dp) else tokens.shapes.button,
         colors = ButtonDefaults.buttonColors(
             containerColor = tokens.colors.accent,
             contentColor = tokens.colors.onAccent,

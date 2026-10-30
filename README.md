@@ -1,3 +1,11 @@
+# FRAME
+
+FRAME is a modified version of [Nuvio Mobile](https://github.com/NuvioMedia/NuvioMobile) by NuvioMedia,
+with an Apple TV-inspired design and glass controls on Android. It is distributed under the same
+GNU General Public License v3.0; the original project's README follows.
+
+---
+
 <div align="center">
 
   <img src="https://nuvio.tv/assets/nuvio-app-logo-wordmark.webp" alt="Nuvio" width="320" />

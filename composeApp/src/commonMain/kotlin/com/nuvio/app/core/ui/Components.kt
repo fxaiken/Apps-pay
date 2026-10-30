@@ -341,12 +341,17 @@ fun NuvioInputField(
     trailingContent: (@Composable (() -> Unit))? = null,
 ) {
     val tokens = MaterialTheme.nuvio
+    val fieldShape = RoundedCornerShape(NuvioTokens.Radius.lg)
+    // Apple TV: fields are glass, with a brighter rim only while focused.
+    val glass = useAppleTvDesign
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .then(if (glass) Modifier.liquidGlass(fieldShape, fillAlpha = 0.10f) else Modifier),
         singleLine = true,
-        shape = RoundedCornerShape(NuvioTokens.Radius.lg),
+        shape = fieldShape,
         placeholder = {
             Text(
                 text = placeholder,
@@ -357,10 +362,10 @@ fun NuvioInputField(
         textStyle = MaterialTheme.typography.bodyLarge.copy(color = tokens.colors.textPrimary),
         trailingIcon = trailingContent,
         colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = tokens.colors.borderFocus,
-            unfocusedBorderColor = tokens.colors.borderDefault,
-            focusedContainerColor = tokens.colors.surfaceCard,
-            unfocusedContainerColor = tokens.colors.surfaceCard,
+            focusedBorderColor = if (glass) Color.White.copy(alpha = 0.45f) else tokens.colors.borderFocus,
+            unfocusedBorderColor = if (glass) Color.Transparent else tokens.colors.borderDefault,
+            focusedContainerColor = if (glass) Color.Transparent else tokens.colors.surfaceCard,
+            unfocusedContainerColor = if (glass) Color.Transparent else tokens.colors.surfaceCard,
             cursorColor = tokens.colors.accent,
         ),
     )

@@ -96,7 +96,8 @@ internal fun continueWatchingSectionHeightEstimate(
     val headerHeight = NuvioTokens.Space.s40
     val headerToRowGap = NuvioTokens.Space.s8 + NuvioTokens.Space.s2
     val rowHeight = when (style) {
-        ContinueWatchingSectionStyle.Card -> continueWatchingLandscapeCardHeight(basePosterWidthDp)
+        ContinueWatchingSectionStyle.Card -> continueWatchingLandscapeCardHeight(basePosterWidthDp) +
+            if (useAppleTvDesign) AppleTvContinueWatchingTextBlockHeight else 0.dp
         ContinueWatchingSectionStyle.Wide -> layout.wideCardHeight
         ContinueWatchingSectionStyle.Poster -> layout.posterCardHeight + layout.posterTitleBlockHeight
     }
@@ -710,6 +711,20 @@ private fun ContinueWatchingCard(
     val backgroundColor = MaterialTheme.colorScheme.background
     val badgeBackground = continueWatchingBadgeBackground(item)
 
+    if (useAppleTvDesign) {
+        AppleTvContinueWatchingCard(
+            item = item,
+            width = cardMetrics.width,
+            cornerRadius = cardMetrics.cornerRadius,
+            imageUrl = imageUrl,
+            blurArtwork = shouldBlurArtwork,
+            subtitle = listOfNotNull(episodeCode, badgeText.takeIf { it.isNotBlank() }).joinToString(" · "),
+            onClick = onClick,
+            onLongClick = onLongClick,
+        )
+        return
+    }
+
     Box(
         modifier = Modifier
             .width(cardMetrics.width)
@@ -846,6 +861,99 @@ private fun ContinueWatchingCard(
                         .background(if (useAppleTvDesign) Color.White else MaterialTheme.colorScheme.primary),
                 )
             }
+        }
+    }
+}
+
+private val AppleTvContinueWatchingTextBlockHeight = 46.dp
+
+/**
+ * Apple TV "Up Next" card: clean artwork with a white progress line on the image,
+ * and the title and episode/progress line set underneath instead of over the art.
+ */
+@Composable
+private fun AppleTvContinueWatchingCard(
+    item: ContinueWatchingItem,
+    width: Dp,
+    cornerRadius: Dp,
+    imageUrl: String?,
+    blurArtwork: Boolean,
+    subtitle: String,
+    onClick: (() -> Unit)?,
+    onLongClick: (() -> Unit)?,
+) {
+    val shape = RoundedCornerShape(cornerRadius)
+    Column(
+        modifier = Modifier.width(width),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(PosterLandscapeAspectRatio)
+                .clip(shape)
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .nuvioCardDepth(
+                    shape = shape,
+                    surface = NuvioCardDepthSurface.ContinueWatching,
+                )
+                .posterCardClickable(
+                    onClick = onClick,
+                    onLongClick = onLongClick,
+                    zoomImageUrl = imageUrl,
+                    zoomCornerRadius = cornerRadius,
+                ),
+        ) {
+            if (imageUrl != null) {
+                AsyncImage(
+                    model = continuewatchingImageModel(
+                        imageUrl = cloudLibraryDisplayArtworkUrl(imageUrl),
+                        fallbackUrl = item.fallbackUrlForArtwork(imageUrl),
+                    ),
+                    contentDescription = item.title,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .then(if (blurArtwork) Modifier.blur(18.dp) else Modifier),
+                    contentScale = ContentScale.Crop,
+                )
+            }
+            if (item.shufflePlayback) ShuffleBadge(Modifier.align(Alignment.TopStart).padding(8.dp))
+            if (item.progressFraction > 0f) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(horizontal = 10.dp, vertical = 9.dp)
+                        .fillMaxWidth()
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(Color.White.copy(alpha = 0.32f)),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(item.progressFraction.coerceIn(0f, 1f))
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(Color.White),
+                    )
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = item.title,
+            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+            color = MaterialTheme.colorScheme.onBackground,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        if (subtitle.isNotBlank()) {
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }

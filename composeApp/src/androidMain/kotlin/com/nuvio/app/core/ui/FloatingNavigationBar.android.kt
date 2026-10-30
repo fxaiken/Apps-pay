@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.ClipOp
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.graphicsLayer
@@ -67,7 +68,8 @@ internal actual fun FloatingNavigationBar(
         label = "nav_glow_strength",
     )
     val tokens = MaterialTheme.nuvio
-    val accentColor = tokens.colors.accent
+    // Apple TV: the selected tab is lit white glass whatever the theme accent is.
+    val accentColor = if (useAppleTvDesign) Color.White else tokens.colors.accent
     val selectedSurface = accentColor.copy(alpha = NuvioTokens.Opacity.selected)
     val labelFraction by animateFloatAsState(
         targetValue = scrollState?.labelVisibility ?: 1f,

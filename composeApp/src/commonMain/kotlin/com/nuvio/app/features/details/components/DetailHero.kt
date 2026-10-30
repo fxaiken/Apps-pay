@@ -1,6 +1,5 @@
 package com.nuvio.app.features.details.components
 
-import com.nuvio.app.core.ui.useAppleTvDesign
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -233,7 +232,7 @@ fun DetailHero(
                         .fillMaxWidth()
                         .padding(horizontal = if (isTablet) 32.dp else 18.dp)
                         .padding(bottom = 8.dp),
-                    horizontalAlignment = if (useAppleTvDesign) Alignment.Start else Alignment.CenterHorizontally,
+                    horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     if (logoUrl != null && !logoLoadError) {
                         AsyncImage(
@@ -243,7 +242,7 @@ fun DetailHero(
                                 .fillMaxWidth(if (isTablet) 0.56f else 0.6f)
                                 .widthIn(max = contentMaxWidth)
                                 .height(if (isTablet) 72.dp else 80.dp),
-                            alignment = if (useAppleTvDesign) Alignment.CenterStart else Alignment.Center,
+                            alignment = Alignment.Center,
                             contentScale = ContentScale.Fit,
                             onError = { logoLoadError = true },
                         )
@@ -252,7 +251,7 @@ fun DetailHero(
                             text = meta.name,
                             style = if (isTablet) MaterialTheme.typography.displaySmall else MaterialTheme.typography.displayLarge,
                             color = MaterialTheme.colorScheme.onBackground,
-                            textAlign = if (useAppleTvDesign) TextAlign.Start else TextAlign.Center,
+                            textAlign = TextAlign.Center,
                         )
                     }
 
@@ -262,7 +261,7 @@ fun DetailHero(
                             text = meta.genres.take(3).joinToString(" \u2022 "),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = if (useAppleTvDesign) TextAlign.Start else TextAlign.Center,
+                            textAlign = TextAlign.Center,
                         )
                     }
                 }

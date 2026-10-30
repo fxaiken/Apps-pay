@@ -25,6 +25,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,6 +54,9 @@ class NuvioNavBarScrollState {
     /** 1f = labels fully visible (expanded), 0f = labels hidden (collapsed, icons only) */
     var labelVisibility by mutableFloatStateOf(1f)
         private set
+
+    /** True when the bar follows scrolling (adaptive style), so it may fold away on scroll down. */
+    var followsScroll by mutableStateOf(false)
 
     private var accumulatedDelta = 0f
 

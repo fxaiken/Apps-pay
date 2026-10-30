@@ -70,6 +70,16 @@ import com.nuvio.app.core.ui.centeredVerticalBarPadding
 import com.nuvio.app.core.ui.withVerticalBar
 import com.nuvio.app.core.ui.useAppleTvDesign
 import com.nuvio.app.core.ui.liquidGlass
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.zIndex
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.nuvio.app.features.library.LibraryRepository
+import org.jetbrains.compose.resources.painterResource
 import com.nuvio.app.core.ui.pressScale
 import com.nuvio.app.core.ui.rememberPressProgress
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -119,8 +129,11 @@ fun HomeHeroSection(
     showImdbRating: Boolean = true,
     showMdbListRatings: Boolean = false,
     onItemClick: ((MetaPreview) -> Unit)? = null,
+    onItemLongClick: ((MetaPreview) -> Unit)? = null,
 ) {
     if (items.isEmpty()) return
+    // Read so the add button's saved/check state follows library changes.
+    val libraryState by LibraryRepository.uiState.collectAsStateWithLifecycle()
 
     val pagerState = key(items.size) {
         rememberPagerState(
@@ -214,7 +227,22 @@ fun HomeHeroSection(
                 .fillMaxWidth()
                 .heroStretchHeight(layout.heroHeight, stretchPx),
         ) {
-            val alignStart = layout.isTablet || useAppleTvDesign
+            if (useAppleTvDesign && !layout.isTablet) {
+                Image(
+                    painter = painterResource(Res.drawable.app_logo_wordmark),
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    alignment = Alignment.CenterStart,
+                    modifier = Modifier
+                        .zIndex(2f)
+                        .align(Alignment.TopStart)
+                        .statusBarsPadding()
+                        .padding(start = 18.dp, top = 8.dp)
+                        .height(34.dp)
+                        .graphicsLayer { alpha = (1f - scrollOffsetPx / 300f).coerceIn(0f, 1f) },
+                )
+            }
+            val alignStart = layout.isTablet
             HorizontalPager(
                 state = pagerState,
                 userScrollEnabled = false,
@@ -332,10 +360,21 @@ fun HomeHeroSection(
 
                     if (useAppleTvDesign && !layout.isTablet) {
                         Spacer(modifier = Modifier.height(16.dp))
-                        AppleTvHeroPlayButton(
-                            enabled = onItemClick != null,
-                            onClick = { onItemClick?.invoke(currentItem) },
-                        )
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            AppleTvHeroPlayButton(
+                                enabled = onItemClick != null,
+                                onClick = { onItemClick?.invoke(currentItem) },
+                            )
+                            if (onItemLongClick != null) {
+                                AppleTvHeroAddButton(
+                                    saved = libraryState.let { LibraryRepository.isSaved(currentItem.id, currentItem.type) },
+                                    onClick = { onItemLongClick(currentItem) },
+                                )
+                            }
+                        }
                     } else if (!layout.isTablet) {
                         Spacer(modifier = Modifier.height(14.dp))
                         Surface(
@@ -420,21 +459,23 @@ private fun AppleTvHeroPlayButton(
     Surface(
         modifier = Modifier
             .pressScale({ press }, pressedScale = 0.96f)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(50))
             .clickable(interactionSource = interaction, indication = null, enabled = enabled, onClick = onClick),
         color = Color.White,
         contentColor = Color.Black,
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(50),
     ) {
         Row(
-            modifier = Modifier.padding(start = 22.dp, end = 26.dp, top = 12.dp, bottom = 12.dp),
+            modifier = Modifier
+                .height(48.dp)
+                .padding(start = 24.dp, end = 28.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Icon(
-                imageVector = Icons.Rounded.PlayArrow,
+                imageVector = Icons.Outlined.Info,
                 contentDescription = null,
-                modifier = Modifier.size(22.dp),
+                modifier = Modifier.size(20.dp),
             )
             Text(
                 text = stringResource(Res.string.home_view_details),
@@ -445,30 +486,52 @@ private fun AppleTvHeroPlayButton(
     }
 }
 
+/** Glass "+" beside the main button; shows a check once the title is in the library. */
+@Composable
+private fun AppleTvHeroAddButton(
+    saved: Boolean,
+    onClick: () -> Unit,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val press by rememberPressProgress(interaction)
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .pressScale({ press })
+            .liquidGlass(CircleShape, fillAlpha = 0.18f, highlight = press)
+            .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = if (saved) Icons.Rounded.Check else Icons.Rounded.Add,
+            contentDescription = null,
+            tint = Color.White,
+            modifier = Modifier.size(24.dp),
+        )
+    }
+}
+
 @Composable
 private fun AppleTvHeroPageIndicator(
     itemCount: Int,
     activeFraction: (Int) -> Float,
     onSelect: (Int) -> Unit,
 ) {
-    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-        Row(
-            modifier = Modifier
-                .liquidGlass(RoundedCornerShape(50))
-                .padding(horizontal = 10.dp, vertical = 7.dp),
-            horizontalArrangement = Arrangement.spacedBy(7.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            repeat(itemCount) { index ->
-                val fraction = activeFraction(index)
-                Box(
-                    modifier = Modifier
-                        .size(7.dp)
-                        .clip(CircleShape)
-                        .clickable { onSelect(index) }
-                        .background(Color.White.copy(alpha = 0.32f + 0.68f * fraction)),
-                )
-            }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        repeat(itemCount) { index ->
+            val fraction = activeFraction(index)
+            Box(
+                modifier = Modifier
+                    .width(7.dp + 15.dp * fraction)
+                    .height(7.dp)
+                    .clip(CircleShape)
+                    .clickable { onSelect(index) }
+                    .background(Color.White.copy(alpha = 0.35f + 0.65f * fraction)),
+            )
         }
     }
 }
@@ -530,7 +593,7 @@ private fun HeroContentBlock(
     }
     val logoUrl = item.logo?.takeIf { it.isNotBlank() }
 
-    val alignStart = layout.isTablet || useAppleTvDesign
+    val alignStart = layout.isTablet
     Column(
         modifier = Modifier
             .fillMaxWidth()

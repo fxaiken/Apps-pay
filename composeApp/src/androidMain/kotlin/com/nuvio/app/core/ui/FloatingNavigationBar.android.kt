@@ -1,6 +1,15 @@
 package com.nuvio.app.core.ui
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Icon
+import org.jetbrains.compose.resources.painterResource
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -86,6 +95,13 @@ internal actual fun FloatingNavigationBar(
     val density = LocalDensity.current
     val trackHeight = 48.dp + (if (compactSize) 8.dp else 16.dp) * labelFraction
     val horizontalPadding = 58.dp - 30.dp * labelFraction
+    // Apple TV (iOS 26): scrolling down folds the bar into one glass circle holding the
+    // current tab; scrolling back up, or tapping the circle, unfolds it.
+    val minimize by animateFloatAsState(
+        targetValue = if (useAppleTvDesign && !compactSize && scrollState != null && scrollState.followsScroll && scrollState.labelVisibility < 0.5f) 1f else 0f,
+        animationSpec = spring(dampingRatio = 0.78f, stiffness = Spring.StiffnessMediumLow),
+        label = "tab_bar_minimize",
+    )
 
     LaunchedEffect(visualSelectedIndex, items.size) {
         motion.select(visualSelectedIndex)
@@ -108,8 +124,30 @@ internal actual fun FloatingNavigationBar(
             .padding(horizontal = horizontalPadding),
         contentAlignment = Alignment.BottomCenter,
     ) {
-        Box(
+        if (minimize > 0.02f) {
+            MinimizedTabButton(
+                item = items.firstOrNull { it.selected } ?: items.first(),
+                hazeState = hazeState,
+                onExpand = { scrollState?.expand() },
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .offset(x = 18.dp - horizontalPadding)
+                    .graphicsLayer {
+                        alpha = minimize
+                        val scale = 0.7f + 0.3f * minimize
+                        scaleX = scale
+                        scaleY = scale
+                    },
+            )
+        }
+        if (minimize < 0.98f) Box(
             modifier = Modifier
+                .graphicsLayer {
+                    alpha = 1f - minimize
+                    transformOrigin = TransformOrigin(0f, 0.5f)
+                    scaleX = 1f - 0.78f * minimize
+                    scaleY = 1f - 0.1f * minimize
+                }
                 .widthIn(max = 400.dp)
                 .fillMaxWidth()
                 .height(trackHeight)
@@ -190,6 +228,35 @@ internal actual fun FloatingNavigationBar(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun MinimizedTabButton(
+    item: FloatingNavigationItem,
+    hazeState: HazeState?,
+    onExpand: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val press by rememberPressProgress(interaction)
+    Box(
+        modifier = modifier
+            .size(52.dp)
+            .pressScale({ press })
+            .clip(CircleShape)
+            .clickable(interactionSource = interaction, indication = null, onClickLabel = item.label, onClick = onExpand),
+        contentAlignment = Alignment.Center,
+    ) {
+        GlassBarSurface(hazeState, Modifier.matchParentSize())
+        val icon = item.icon
+        val drawable = item.drawable
+        val content = item.content
+        when {
+            icon != null -> Icon(imageVector = icon, contentDescription = item.label, tint = Color.White, modifier = Modifier.size(24.dp))
+            drawable != null -> Icon(painter = painterResource(drawable), contentDescription = item.label, tint = Color.White, modifier = Modifier.size(24.dp))
+            content != null -> content(onExpand)
         }
     }
 }

@@ -1,5 +1,9 @@
 package com.nuvio.app
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
+import com.nuvio.app.core.ui.FrameLaunchIntro
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -45,6 +49,7 @@ fun App(
     appGateController: AppGateController? = null,
 ) {
     AppEnvironment {
+      Box(modifier = Modifier.fillMaxSize()) {
         AppGate(
             initialTab = initialTab,
             initialRoute = initialRoute,
@@ -65,6 +70,8 @@ fun App(
             nativeProfileSwitcherController = nativeProfileSwitcherController,
             appGateController = appGateController,
         )
+        FrameLaunchIntro()
+      }
     }
 }
 

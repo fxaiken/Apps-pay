@@ -34,6 +34,8 @@ import androidx.compose.material.icons.rounded.Forward10
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.LockOpen
 import androidx.compose.material.icons.rounded.Replay10
+import com.nuvio.app.core.ui.liquidGlass
+import com.nuvio.app.core.ui.useAppleTvDesign
 import com.nuvio.app.core.ui.NuvioLoadingIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -571,7 +573,13 @@ internal fun PlayerHeaderIconButton(
         modifier = Modifier
             .size(buttonSize)
             .clip(CircleShape)
-            .background(Color.Black.copy(alpha = 0.35f))
+            .then(
+                if (useAppleTvDesign) {
+                    Modifier.liquidGlass(CircleShape, fillAlpha = 0.12f)
+                } else {
+                    Modifier.background(Color.Black.copy(alpha = 0.35f))
+                },
+            )
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
@@ -629,6 +637,7 @@ private fun SideControlButton(
     Box(
         modifier = Modifier
             .clip(CircleShape)
+            .then(if (useAppleTvDesign) Modifier.liquidGlass(CircleShape, fillAlpha = 0.12f) else Modifier)
             .clickable(onClick = onClick)
             .padding(metrics.sideButtonPadding),
         contentAlignment = Alignment.Center,
@@ -656,6 +665,7 @@ internal fun PlayPauseControlButton(
     Box(
         modifier = Modifier
             .clip(CircleShape)
+            .then(if (useAppleTvDesign) Modifier.liquidGlass(CircleShape, fillAlpha = 0.14f) else Modifier)
             .clickable(onClick = onClick)
             .padding(metrics.playButtonPadding),
         contentAlignment = Alignment.Center,
@@ -722,13 +732,17 @@ private fun ProgressControls(
             horizontalArrangement = Arrangement.Center,
         ) {
             Surface(
-                color = Color.Black.copy(alpha = 0.5f),
+                color = if (useAppleTvDesign) Color.Transparent else Color.Black.copy(alpha = 0.5f),
                 shape = RoundedCornerShape(24.dp),
-                modifier = Modifier.border(
-                    width = 1.dp,
-                    color = Color.White.copy(alpha = 0.2f),
-                    shape = RoundedCornerShape(24.dp),
-                ),
+                modifier = if (useAppleTvDesign) {
+                    Modifier.liquidGlass(RoundedCornerShape(24.dp), fillAlpha = 0.12f)
+                } else {
+                    Modifier.border(
+                        width = 1.dp,
+                        color = Color.White.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(24.dp),
+                    )
+                },
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
@@ -993,9 +1007,16 @@ private fun TimePill(
 ) {
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(Color.Black.copy(alpha = 0.5f))
-            .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+            .then(
+                if (useAppleTvDesign) {
+                    Modifier.liquidGlass(RoundedCornerShape(12.dp), fillAlpha = 0.12f)
+                } else {
+                    Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color.Black.copy(alpha = 0.5f))
+                        .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+                },
+            )
             .padding(horizontal = 10.dp, vertical = 4.dp),
     ) {
         Text(

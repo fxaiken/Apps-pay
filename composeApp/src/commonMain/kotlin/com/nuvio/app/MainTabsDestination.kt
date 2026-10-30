@@ -197,6 +197,7 @@ internal fun MainTabsDestination(
                         NavBarStyle.COMPACT -> navBarScrollState.collapse()
                         else -> {}
                     }
+                    navBarScrollState.followsScroll = navBarStyleSetting == NavBarStyle.ADAPTIVE
                     FloatingNavigationBar(
                         modifier = Modifier.align(Alignment.BottomCenter),
                         scrollState = navBarScrollState,

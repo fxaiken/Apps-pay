@@ -1018,6 +1018,7 @@ fun HomeScreen(
                                 showImdbRating = homeHeroState.showImdbRating,
                                 showMdbListRatings = homeHeroState.showMdbListRatings,
                                 onItemClick = onPosterClick,
+                                onItemLongClick = onPosterLongClick,
                             )
 
                             else -> HomeHeroReservedSpace(

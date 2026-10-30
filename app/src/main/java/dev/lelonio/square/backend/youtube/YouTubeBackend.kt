@@ -849,7 +849,13 @@ class YouTubeBackend(private val account: YouTubeAccount) : MusicBackend {
 
         val found = dev.lelonio.square.backend.lyrics.LyricsLibrary.lyrics(
             dev.lelonio.square.backend.lyrics.LyricsQuery(uri, title, artist, durationMs),
-        )
+        ) ?: LyricsTitle.clean(title, artist)?.let { (cleanTitle, cleanArtist) ->
+            // FRAME MUSIC: an upload's title, "Artist - Song (Official Video)",
+            // asked again as the song and the artist it names.
+            dev.lelonio.square.backend.lyrics.LyricsLibrary.lyrics(
+                dev.lelonio.square.backend.lyrics.LyricsQuery(uri, cleanTitle, cleanArtist, durationMs),
+            )
+        }
 
         if (found != null) {
             runCatching { DownloadExtras.rememberLyrics(uri, lyricsJson.encodeToString(found)) }

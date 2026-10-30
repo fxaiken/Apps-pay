@@ -1592,6 +1592,33 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
 
+        // FRAME MUSIC: a SoundCloud link opens its song, or keeps its set.
+        if (container.activeBackend is dev.lelonio.square.backend.youtube.YouTubeBackend &&
+            dev.lelonio.square.backend.youtube.SoundCloud.isLink(query)
+        ) {
+            searchJob = viewModelScope.launch {
+                _search.value = _search.value.copy(loading = true, error = null)
+                runCatching {
+                    withContext(Dispatchers.IO) { dev.lelonio.square.backend.youtube.SoundCloud.fromLink(query) }
+                }.onSuccess { results ->
+                    currentCoroutineContext().ensureActive()
+                    if (results.playlists.isNotEmpty()) refresh(restart = true)
+                    _search.value = _search.value.copy(
+                        loading = false,
+                        results = results,
+                        needsSetup = false,
+                        loadingMore = false,
+                        exhausted = true,
+                    )
+                }.onFailure {
+                    if (it is kotlinx.coroutines.CancellationException) throw it
+                    android.util.Log.e(TAG, "soundcloud link failed: ${chain(it)}", it)
+                    _search.value = _search.value.copy(loading = false, error = describe(it))
+                }
+            }
+            return
+        }
+
         val spotifyLink = dev.lelonio.square.data.util.SpotifyLinkParser.parse(query)
         if (spotifyLink != null) {
             searchJob = viewModelScope.launch {

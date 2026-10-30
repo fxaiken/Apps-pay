@@ -278,7 +278,13 @@ fun SearchScreen(
 
             else -> {
                 val all = kind == Kind.ALL
+                // FRAME MUSIC: SoundCloud's songs in a section of their own, so
+                // the ones only SoundCloud has are not lost under YouTube's.
+                val soundcloud = state.results.tracks
+                    .filter { dev.lelonio.square.backend.youtube.SoundCloud.owns(it.uri) }
+                    .let { if (all) it.take(TOP_RESULTS) else it }
                 val tracks = state.results.tracks
+                    .filterNot { dev.lelonio.square.backend.youtube.SoundCloud.owns(it.uri) }
                     .let { if (all) it.take(TOP_RESULTS) else it }
 
                 if ((all || kind == Kind.TRACKS) && tracks.isNotEmpty()) {
@@ -304,6 +310,28 @@ fun SearchScreen(
                                 onMenu = { onTrackMenu(track) },
                                 badge = stringResource(R.string.lyrics_match)
                                     .takeIf { track.uri in state.results.lyricMatches },
+                            )
+                        }
+                    }
+                }
+
+                if ((all || kind == Kind.TRACKS) && soundcloud.isNotEmpty()) {
+                    item(contentType = "section") { SectionTitle("SoundCloud") }
+                    items(
+                        count = soundcloud.size,
+                        key = { "soundcloud-${soundcloud[it].uri}-$it" },
+                        contentType = { "track" },
+                    ) { index ->
+                        val track = soundcloud[index]
+                        SwipeToQueue(onQueue = { onEnqueue(track) }) {
+                            ResultRow(
+                                title = track.name,
+                                subtitle = track.artist,
+                                artworkUrl = track.artworkUrl,
+                                highlighted = track.uri == nowPlayingUri,
+                                round = false,
+                                onClick = { onPlayTrack(soundcloud, index) },
+                                onMenu = { onTrackMenu(track) },
                             )
                         }
                     }

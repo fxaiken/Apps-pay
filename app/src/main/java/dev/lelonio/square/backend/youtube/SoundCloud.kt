@@ -58,7 +58,7 @@ object SoundCloud {
     )
 
     /** Tracks for [query]; empty when SoundCloud does not answer. Blocking. */
-    fun search(query: String, limit: Int = 12): List<CatalogTrack> = runCatching {
+    fun search(query: String, limit: Int = 20): List<CatalogTrack> = runCatching {
         YouTubeStreams.ensureNewPipe()
         val extractor = ServiceList.SoundCloud.getSearchExtractor(query, listOf("tracks"), "")
         extractor.fetchPage()
@@ -139,6 +139,64 @@ object SoundCloud {
     fun remember(tracks: List<CatalogTrack>) = tracks.forEach { seen[it.uri] = it }
 
     fun known(uri: String): CatalogTrack? = seen[uri] ?: saved().firstOrNull { it.uri == uri }
+
+    /** Whether [text] is a SoundCloud link to open rather than words to search. */
+    fun isLink(text: String) = text.trim().let {
+        it.startsWith("http") && (it.contains("soundcloud.com/") || it.contains("on.soundcloud.com/"))
+    }
+
+    /**
+     * A pasted SoundCloud link: a song plays where it lands, a set (playlist or
+     * album) is kept in the library like an imported Spotify list. Blocking.
+     */
+    fun fromLink(link: String): dev.lelonio.square.data.SearchResults {
+        YouTubeStreams.ensureNewPipe()
+        val url = link.trim().substringBefore('?')
+        if ("/sets/" in url) {
+            val list = org.schabi.newpipe.extractor.playlist.PlaylistInfo.getInfo(ServiceList.SoundCloud, url)
+            val tracks = list.relatedItems.filterIsInstance<StreamInfoItem>().map(::toTrack)
+            if (tracks.isEmpty()) error("This SoundCloud set is empty or private")
+            remember(tracks)
+            val stored = LocalPlaylists.Stored(
+                id = "${LocalPlaylists.ID_PREFIX}SC_${url.hashCode().toUInt()}",
+                name = list.name,
+                artworkUrl = list.thumbnails.maxByOrNull { it.width }?.url ?: tracks.first().artworkUrl,
+                tracks = tracks,
+            )
+            LocalPlaylists.save(stored)
+            return dev.lelonio.square.data.SearchResults(
+                playlists = listOf(
+                    dev.lelonio.square.data.SearchItem(
+                        uri = LocalPlaylists.uriOf(stored.id),
+                        title = stored.name,
+                        subtitle = "SoundCloud · ${tracks.size}",
+                        artworkUrl = stored.artworkUrl,
+                    ),
+                ),
+                tracks = tracks,
+            )
+        }
+        val info = StreamInfo.getInfo(ServiceList.SoundCloud, url)
+        val track = CatalogTrack(
+            uri = uriOf(info.url),
+            name = info.name,
+            artist = info.uploaderName.orEmpty(),
+            album = "SoundCloud",
+            durationMs = info.duration.coerceAtLeast(0) * 1000L,
+            artworkUrl = info.thumbnails.maxByOrNull { it.width }?.url,
+        )
+        remember(listOf(track))
+        return dev.lelonio.square.data.SearchResults(tracks = listOf(track))
+    }
+
+    private fun toTrack(item: StreamInfoItem) = CatalogTrack(
+        uri = uriOf(item.url),
+        name = item.name,
+        artist = item.uploaderName.orEmpty(),
+        album = "SoundCloud",
+        durationMs = item.duration.coerceAtLeast(0) * 1000L,
+        artworkUrl = item.thumbnails.maxByOrNull { it.width }?.url,
+    )
 
     private const val STREAM_TTL_MS = 30 * 60 * 1000L
 }

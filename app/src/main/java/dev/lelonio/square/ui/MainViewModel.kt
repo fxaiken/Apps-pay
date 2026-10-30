@@ -1600,6 +1600,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     resolveSpotifyLink(spotifyLink)
                 }.onSuccess { results ->
                     currentCoroutineContext().ensureActive()
+                    // FRAME MUSIC: an imported list goes straight into the library.
+                    if (results.playlists.any { it.uri.contains(dev.lelonio.square.backend.youtube.LocalPlaylists.ID_PREFIX) }) {
+                        refresh(restart = true)
+                    }
                     _search.value = _search.value.copy(
                         loading = false,
                         results = results,
@@ -1659,6 +1663,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private suspend fun resolveSpotifyLink(link: dev.lelonio.square.data.util.SpotifyLink): SearchResults =
         withContext(Dispatchers.IO) {
+            // FRAME MUSIC: on YouTube Music, a Spotify list is brought over
+            // song by song instead, with no Spotify account at all.
+            val youtube = container.activeBackend as? dev.lelonio.square.backend.youtube.YouTubeBackend
+            if (youtube != null) {
+                when (link) {
+                    is dev.lelonio.square.data.util.SpotifyLink.Playlist ->
+                        return@withContext youtube.importSpotify("playlist", link.id)
+                    is dev.lelonio.square.data.util.SpotifyLink.Album ->
+                        return@withContext youtube.importSpotify("album", link.id)
+                    else -> Unit
+                }
+            }
             when (link) {
                 is dev.lelonio.square.data.util.SpotifyLink.Track -> {
                     val trackDto = runCatching { container.api.track(link.id) }.getOrNull()

@@ -180,8 +180,49 @@ class YouTubeBackend(private val account: YouTubeAccount) : MusicBackend {
      */
     override suspend fun playlists(): List<CatalogPlaylist> = withContext(Dispatchers.IO) {
         // FRAME MUSIC: the songs kept from SoundCloud, first, signed in or not.
-        listOfNotNull(SoundCloud.libraryPlaylist()) + youtubePlaylists()
+        listOfNotNull(SoundCloud.libraryPlaylist()) + LocalPlaylists.asPlaylists() + youtubePlaylists()
     }
+
+    /**
+     * FRAME MUSIC: a Spotify playlist or album, by its link, rebuilt from
+     * YouTube Music's songs and kept on the phone as a playlist.
+     */
+    suspend fun importSpotify(kind: String, id: String): SearchResults = withContext(Dispatchers.IO) {
+        val page = SpotifyEmbed.read(kind, id)
+        val permits = kotlinx.coroutines.sync.Semaphore(6)
+        val matched = coroutineScope {
+            page.tracks.map { (title, artist) ->
+                async { permits.withPermit { matchSong(title, artist) } }
+            }.awaitAll()
+        }.filterNotNull().distinctBy { it.uri }
+        if (matched.isEmpty()) error("None of these songs were found on YouTube Music")
+        val stored = LocalPlaylists.Stored(
+            id = "${LocalPlaylists.ID_PREFIX}$id",
+            name = page.name,
+            artworkUrl = page.coverUrl ?: matched.first().artworkUrl,
+            tracks = matched,
+        )
+        LocalPlaylists.save(stored)
+        SearchResults(
+            playlists = listOf(
+                SearchItem(
+                    uri = LocalPlaylists.uriOf(stored.id),
+                    title = stored.name,
+                    subtitle = "Spotify → FRAME MUSIC · ${matched.size}/${page.tracks.size}",
+                    artworkUrl = stored.artworkUrl,
+                ),
+            ),
+            tracks = matched,
+        )
+    }
+
+    private suspend fun matchSong(title: String, artist: String): CatalogTrack? =
+        YouTube.search("$title $artist".trim(), YouTube.SearchFilter.FILTER_SONG)
+            .getOrNull()
+            ?.items
+            ?.filterIsInstance<SongItem>()
+            ?.firstOrNull()
+            ?.let(::toCatalogTrack)
 
     private suspend fun youtubePlaylists(): List<CatalogPlaylist> = withContext(Dispatchers.IO) {
         if (!account.isSignedIn) return@withContext emptyList()
@@ -529,6 +570,7 @@ class YouTubeBackend(private val account: YouTubeAccount) : MusicBackend {
             // FRAME MUSIC: SoundCloud, kept on the phone.
             SoundCloud.owns(uri) -> emptyList()
             id == SoundCloud.LIBRARY_ID -> SoundCloud.saved()
+            LocalPlaylists.owns(id) -> LocalPlaylists.tracks(id)
 
             // A song's radio, reopened: asked again, as there is no list to browse.
             isStation(uri) -> radio("$TRACK_PREFIX${id.removePrefix(RADIO_LIST)}")
@@ -834,6 +876,11 @@ class YouTubeBackend(private val account: YouTubeAccount) : MusicBackend {
     }
 
     override suspend fun deletePlaylist(uri: String) {
+        val id = uri.substringAfterLast(':')
+        if (LocalPlaylists.owns(id)) {
+            LocalPlaylists.delete(id)
+            return
+        }
         withContext(Dispatchers.IO) {
             YouTube.deletePlaylist(uri.substringAfterLast(':')).getOrThrow()
         }

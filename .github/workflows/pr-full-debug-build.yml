@@ -44,20 +44,6 @@ jobs:
             touch local.properties
           fi
 
-      # A stable signing key (kept in the Actions cache, never in the repo) so each new
-      # APK installs over the previous one.
-      - name: Restore signing key
-        uses: actions/cache@v4
-        with:
-          path: ~/.android/debug.keystore
-          key: frame-signing-key-v1
-
-      - name: Ensure signing key
-        run: |
-          mkdir -p ~/.android
-          [ -f ~/.android/debug.keystore ] || keytool -genkeypair -keystore ~/.android/debug.keystore -storepass android \
-            -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=FRAME,O=FRAME,C=PT"
-
       - name: Build fullDebug APK
         run: ./gradlew :androidApp:assembleFullDebug -Pnuvio.android.distribution=full -Pnuvio.ios.distribution=appstore --stacktrace
 
@@ -69,9 +55,32 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      - name: Rename APK for release
+      # Re-sign with FRAME's own key so every release installs over the previous one.
+      # The key lives only in the Actions cache (never in the repo); the release notes
+      # record its fingerprint so a key change is visible.
+      - name: Restore FRAME signing key
         if: github.event_name == 'push'
-        run: cp androidApp/build/outputs/apk/full/debug/androidApp-full-debug.apk frame.apk
+        id: signing-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.frame-signing
+          key: frame-signing-v2
+
+      - name: Sign APK with the FRAME key
+        if: github.event_name == 'push'
+        id: sign
+        run: |
+          mkdir -p ~/.frame-signing
+          KS=~/.frame-signing/frame.keystore
+          if [ ! -f "$KS" ]; then
+            keytool -genkeypair -keystore "$KS" -storetype PKCS12 -storepass frame-signing -alias frame \
+              -keypass frame-signing -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=FRAME,O=FRAME,C=PT"
+          fi
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          "$BT/apksigner" sign --ks "$KS" --ks-pass pass:frame-signing --ks-key-alias frame --key-pass pass:frame-signing \
+            --out frame.apk androidApp/build/outputs/apk/full/debug/androidApp-full-debug.apk
+          "$BT/apksigner" verify --print-certs frame.apk | tee certs.txt
+          echo "fingerprint=$(grep -m1 'SHA-256' certs.txt | awk '{print $NF}')" >> "$GITHUB_OUTPUT"
 
       - name: Publish release
         if: github.event_name == 'push'
@@ -84,6 +93,8 @@ jobs:
           make_latest: false
           files: frame.apk
           body: |
+            Assinatura (SHA-256): ${{ steps.sign.outputs.fingerprint }} · chave reutilizada: ${{ steps.signing-cache.outputs.cache-hit == 'true' && 'sim' || 'não (nova)' }}
+
             FRAME para Android: design ao estilo Apple TV com botões de vidro.
             Baseado no Nuvio Mobile (GPL-3.0); o código-fonte está neste repositório.
             É uma app nova: pode ficar instalada ao lado do Nuvio.

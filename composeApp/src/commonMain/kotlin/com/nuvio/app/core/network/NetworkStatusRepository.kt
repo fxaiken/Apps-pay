@@ -136,7 +136,12 @@ object NetworkStatusRepository {
             return NetworkCondition.NoInternet
         }
 
-        val supabaseReachable = SupabaseEndpointConfig.restEndpointUrls().any { url ->
+        // FRAME has no account server of its own configured; with none to ask,
+        // there is nothing that can be unreachable.
+        val endpoints = SupabaseEndpointConfig.restEndpointUrls()
+        if (endpoints.isEmpty()) return NetworkCondition.Online
+
+        val supabaseReachable = endpoints.any { url ->
             probeReachable(
                 url = url,
                 headers = mapOf("apikey" to ServerConfigurationRepository.active.value.publishableKey),

@@ -34,6 +34,11 @@ object FileUtil {
     inline fun openFile(path: String, onFailureCallback: (Throwable) -> Unit) =
         path
             .runCatching {
+                // FRAME SAVE: a saved video or song plays in the app's own player.
+                if (com.junkfood.seal.player.FramePlayerActivity.canPlay(this)) {
+                    context.startActivity(com.junkfood.seal.player.FramePlayerActivity.intent(context, this))
+                    return@runCatching
+                }
                 createIntentForOpeningFile(this)?.run { context.startActivity(this) }
                     ?: throw Exception()
             }
@@ -198,11 +203,10 @@ object FileUtil {
         File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Seal")
             .also { it.mkdir() }
 
+    // FRAME SAVE: kept in the app's own folder, which the gallery and other
+    // apps do not see, needs no storage permission and goes with the app.
     internal fun getExternalPrivateDownloadDirectory() =
-        File(
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-            PRIVATE_DIRECTORY_SUFFIX,
-        )
+        (context.getExternalFilesDir("videos") ?: File(context.filesDir, "videos")).also { it.mkdirs() }
 
     fun File.createEmptyFile(fileName: String): Result<File> =
         this.runCatching {

@@ -129,6 +129,11 @@
         </provider>
 
         <receiver android:name=".NotificationActionReceiver" />
+        <activity
+            android:name=".player.FramePlayerActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:exported="false"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" />
     </application>
 
 </manifest>

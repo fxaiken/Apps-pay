@@ -211,6 +211,7 @@ private val StringPreferenceDefaults =
 
 private val BooleanPreferenceDefaults =
     mapOf(
+        PRIVATE_DIRECTORY to true,
         FORMAT_SELECTION to true,
         CONFIGURE to true,
         CELLULAR_DOWNLOAD to false,

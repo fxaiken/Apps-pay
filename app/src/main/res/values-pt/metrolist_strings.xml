@@ -422,6 +422,8 @@
     <string name="crossfade_gapless_desc">Ignorar entrelaçamento entre musicas para álbuns desenhados para tocar sem espaços entre eles</string>
     <string name="smart_mix">Mistura inteligente</string>
     <string name="smart_mix_desc">Analisa cada música para começar a seguinte no momento certo: salta finais em silêncio, acompanha os finais que vão baixando e encaixa a mistura no ritmo.</string>
+    <string name="dj_mode">Modo DJ</string>
+    <string name="dj_mode_desc">Mistura as músicas como um DJ: a seguinte entra na batida, ao mesmo ritmo, os graves trocam a meio e depois volta ao seu próprio ritmo.</string>
     <string name="mixes">Mixes</string>
     <string name="audio_offload_disabled_by_crossfade">Desativado porque o crossfade está ativo</string>
     <string name="speed">Velocidade de Reprodução</string>

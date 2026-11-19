@@ -44,13 +44,23 @@ jobs:
 
       - name: Sign
         id: sign
+        env:
+          # Optional: the keystore as base64 in a repository secret, so it can never be lost.
+          FRAMEMUSIC_KEYSTORE_B64: ${{ secrets.FRAMEMUSIC_KEYSTORE_B64 }}
         run: |
           mkdir -p ~/.framemusic-signing
           KS=~/.framemusic-signing/framemusic.keystore
+          if [ -n "$FRAMEMUSIC_KEYSTORE_B64" ]; then
+            echo "$FRAMEMUSIC_KEYSTORE_B64" | base64 -d > "$KS"
+          fi
+          NEWKEY=no
           if [ ! -f "$KS" ]; then
+            # GitHub drops caches unused for 7 days; a new key means the APK cannot update the old install.
+            NEWKEY=yes
             keytool -genkeypair -keystore "$KS" -storetype PKCS12 -storepass framemusic -alias framemusic \
               -keypass framemusic -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=FRAME MUSIC,O=FRAME,C=PT"
           fi
+          echo "newkey=$NEWKEY" >> "$GITHUB_OUTPUT"
           BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
           ls app/build/outputs/apk/izzy/release/
           src=$(ls app/build/outputs/apk/izzy/release/*.apk | head -1)
@@ -72,6 +82,7 @@ jobs:
           files: frame-music.apk
           body: |
             Assinatura (SHA-256): ${{ steps.sign.outputs.fingerprint }}
+            ${{ steps.sign.outputs.newkey == 'yes' && '⚠️ Chave de assinatura nova: desinstale a versão anterior antes de instalar esta.' || '' }}
 
             FRAME MUSIC sobre o Metrolist (GPL-3.0); o código-fonte está neste repositório.
 

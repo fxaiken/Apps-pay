@@ -46,6 +46,7 @@ import com.metrolist.music.constants.CrossfadeDurationKey
 import com.metrolist.music.constants.CrossfadeEnabledKey
 import com.metrolist.music.constants.CrossfadeGaplessKey
 import com.metrolist.music.constants.SmartMixKey
+import com.metrolist.music.constants.DjModeKey
 import com.metrolist.music.constants.AutoLoadMoreKey
 import com.metrolist.music.constants.AutoRadioQueueKey
 import com.metrolist.music.constants.AutoSkipNextOnErrorKey
@@ -106,6 +107,10 @@ fun PlayerSettings(
     )
     val (smartMix, onSmartMixChange) = rememberPreference(
         SmartMixKey,
+        defaultValue = true
+    )
+    val (djMode, onDjModeChange) = rememberPreference(
+        DjModeKey,
         defaultValue = true
     )
     val (crossfadeDuration, onCrossfadeDurationChange) = rememberPreference(
@@ -348,6 +353,29 @@ fun PlayerSettings(
                         },
                         onClick = { onSmartMixChange(!smartMix) }
                     ))
+                    if (smartMix) {
+                        add(Material3SettingsItem(
+                            icon = painterResource(R.drawable.equalizer),
+                            title = { Text(stringResource(R.string.dj_mode)) },
+                            description = { Text(stringResource(R.string.dj_mode_desc)) },
+                            trailingContent = {
+                                Switch(
+                                    checked = djMode,
+                                    onCheckedChange = onDjModeChange,
+                                    thumbContent = {
+                                        Icon(
+                                            painter = painterResource(
+                                                id = if (djMode) R.drawable.check else R.drawable.close
+                                            ),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(SwitchDefaults.IconSize)
+                                        )
+                                    }
+                                )
+                            },
+                            onClick = { onDjModeChange(!djMode) }
+                        ))
+                    }
                     add(Material3SettingsItem(
                         icon = painterResource(R.drawable.timer),
                         title = { Text(stringResource(R.string.crossfade_duration)) },

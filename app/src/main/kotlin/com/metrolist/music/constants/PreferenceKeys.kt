@@ -154,6 +154,8 @@ val CrossfadeDurationKey = floatPreferencesKey("crossfadeDurationFloat")
 val CrossfadeGaplessKey = booleanPreferencesKey("crossfadeGapless")
 /** FRAME MUSIC: analyse each song to time the mix (silence, fade-outs, beat). */
 val SmartMixKey = booleanPreferencesKey("frameSmartMix")
+/** FRAME MUSIC: DJ-style blends (tempo match, beat sync, bass swap). */
+val DjModeKey = booleanPreferencesKey("frameDjMode")
 
 val MaxImageCacheSizeKey = intPreferencesKey("maxImageCacheSize")
 val MaxSongCacheSizeKey = intPreferencesKey("maxSongCacheSize")

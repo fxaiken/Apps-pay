@@ -4,6 +4,7 @@ import androidx.media3.common.C
 import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.BaseAudioProcessor
 import androidx.media3.common.util.UnstableApi
+import com.metrolist.music.playback.automix.TransitionPlanner
 import timber.log.Timber
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -70,7 +71,10 @@ class VolumeNormalizationAudioProcessor : BaseAudioProcessor() {
                     val sample = inputBuffer.getShort()
                     output.putShort(
                         if (applyGain) {
-                            (sample * gain.linearGain)
+                            val scaled = sample * gain.linearGain
+                            val limited =
+                                if (gain.linearGain > 1.0) TransitionPlanner.softClip(scaled / 32768.0) * 32767.0 else scaled
+                            limited
                                 .coerceIn(-32768.0, 32767.0)
                                 .toInt()
                                 .toShort()
@@ -119,7 +123,10 @@ class VolumeNormalizationAudioProcessor : BaseAudioProcessor() {
                     val sample = inputBuffer.getFloat()
                     output.putFloat(
                         if (applyGain) {
-                            (sample * gain.linearGain.toFloat()).coerceIn(-1.0f, 1.0f)
+                            val scaled = sample * gain.linearGain
+                            (if (gain.linearGain > 1.0) TransitionPlanner.softClip(scaled) else scaled)
+                                .toFloat()
+                                .coerceIn(-1.0f, 1.0f)
                         } else {
                             sample
                         },

@@ -353,6 +353,8 @@
     <string name="crossfade_duration">Crossfade duration</string>
     <string name="crossfade_gapless">Disable for gapless albums</string>
     <string name="crossfade_gapless_desc">Skip crossfade for albums designed to play without gaps</string>
+    <string name="smart_mix">Smart mix</string>
+    <string name="smart_mix_desc">Listens to each song to start the next one at the right moment: skips silent endings, follows fade-outs and lands the mix on the beat.</string>
 
     <!-- Romanization Settings -->
     <string name="lyrics_romanize_title">Romanization</string>

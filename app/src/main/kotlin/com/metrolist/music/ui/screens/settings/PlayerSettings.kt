@@ -45,6 +45,7 @@ import com.metrolist.music.constants.AutoDownloadOnLikeKey
 import com.metrolist.music.constants.CrossfadeDurationKey
 import com.metrolist.music.constants.CrossfadeEnabledKey
 import com.metrolist.music.constants.CrossfadeGaplessKey
+import com.metrolist.music.constants.SmartMixKey
 import com.metrolist.music.constants.AutoLoadMoreKey
 import com.metrolist.music.constants.AutoRadioQueueKey
 import com.metrolist.music.constants.AutoSkipNextOnErrorKey
@@ -101,7 +102,11 @@ fun PlayerSettings(
     )
     val (crossfadeEnabled, onCrossfadeEnabledChange) = rememberPreference(
         CrossfadeEnabledKey,
-        defaultValue = false
+        defaultValue = true
+    )
+    val (smartMix, onSmartMixChange) = rememberPreference(
+        SmartMixKey,
+        defaultValue = true
     )
     val (crossfadeDuration, onCrossfadeDurationChange) = rememberPreference(
         CrossfadeDurationKey,
@@ -322,6 +327,27 @@ fun PlayerSettings(
                     onClick = { onCrossfadeEnabledChange(!crossfadeEnabled) }
                 ))
                 if (crossfadeEnabled) {
+                    add(Material3SettingsItem(
+                        icon = painterResource(R.drawable.graphic_eq),
+                        title = { Text(stringResource(R.string.smart_mix)) },
+                        description = { Text(stringResource(R.string.smart_mix_desc)) },
+                        trailingContent = {
+                            Switch(
+                                checked = smartMix,
+                                onCheckedChange = onSmartMixChange,
+                                thumbContent = {
+                                    Icon(
+                                        painter = painterResource(
+                                            id = if (smartMix) R.drawable.check else R.drawable.close
+                                        ),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(SwitchDefaults.IconSize)
+                                    )
+                                }
+                            )
+                        },
+                        onClick = { onSmartMixChange(!smartMix) }
+                    ))
                     add(Material3SettingsItem(
                         icon = painterResource(R.drawable.timer),
                         title = { Text(stringResource(R.string.crossfade_duration)) },

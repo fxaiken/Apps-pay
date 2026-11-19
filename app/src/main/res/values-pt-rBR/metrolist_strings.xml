@@ -300,6 +300,8 @@
     <string name="crossfade_duration">Duração da transição suave</string>
     <string name="crossfade_gapless">Desativar para álbuns sem intervalos</string>
     <string name="crossfade_gapless_desc">Pular a transição suave para álbuns feitos para tocar músicas sem vãos</string>
+    <string name="smart_mix">Mixagem inteligente</string>
+    <string name="smart_mix_desc">Analisa cada música para começar a próxima no momento certo: pula finais em silêncio, acompanha os finais que vão abaixando e encaixa a mixagem no ritmo.</string>
     <string name="audio_offload_disabled_by_crossfade">Desabilitado porque a transição suave está ativa</string>
     <string name="error_title">Erro inesperado</string>
     <string name="error_eq_apply_failed">Falhou a aplicar o perfil do equalizador: %1$s</string>
